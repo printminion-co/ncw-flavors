@@ -34,7 +34,7 @@ function runBuild(args: string[]): number {
       'cache-keys': { type: 'string' },
     },
   });
-  const { artifact, flavor } = buildArtifact({
+  const { artifact, flavor, warnings } = buildArtifact({
     flavorsRoot: values.flavors ?? '',
     flavor: values.flavor ?? '',
     tree: values.tree ?? '',
@@ -52,6 +52,7 @@ function runBuild(args: string[]): number {
       cacheKeys: values['cache-keys'],
     },
   });
+  for (const warning of warnings) process.stderr.write(`${warning}\n`);
   process.stderr.write(formatResolvedFlavor(flavor, values.flavors ?? ''));
   console.log(artifact);
   return 0;

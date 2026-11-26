@@ -55,17 +55,18 @@ test('a base reached through two paths is applied once, where it is first reache
   assert.equal(report.apps['tool'], 'removed', 'applying x again after a would undo the override made by a');
 });
 
-test('a config file with the same name in a nearer base or the flavor replaces the earlier one', () => {
+test('a config file with the same name in a nearer base replaces the earlier one', () => {
   const root = makeFlavorsRoot({
     'bases/b/flavor.yaml': '',
     'bases/b/config/10-core.config.php': '<?php // from the base\n',
     'bases/b/config/20-mail.config.php': '<?php // base mail\n',
-    'flavors/f/flavor.yaml': 'extends: [b]\n',
-    'flavors/f/config/10-core.config.php': '<?php // from the flavor\n',
+    'bases/c/flavor.yaml': 'extends: [b]\n',
+    'bases/c/config/10-core.config.php': '<?php // from the nearer base\n',
+    'flavors/f/flavor.yaml': 'extends: [c]\n',
   });
 
   assert.deepEqual(resolveReport(root, 'f').config_files, {
-    '10-core.config.php': 'flavors/f/config/10-core.config.php',
+    '10-core.config.php': 'bases/c/config/10-core.config.php',
     '20-mail.config.php': 'bases/b/config/20-mail.config.php',
   });
 });
@@ -75,14 +76,15 @@ test('the artifact ships the config file of the nearer declaration', () => {
     'bases/b/flavor.yaml': '',
     'bases/b/config/10-core.config.php': '<?php // from the base\n',
     'bases/b/config/20-mail.config.php': '<?php // base mail\n',
-    'flavors/f/flavor.yaml': 'extends: [b]\n',
-    'flavors/f/config/10-core.config.php': '<?php // from the flavor\n',
+    'bases/c/flavor.yaml': 'extends: [b]\n',
+    'bases/c/config/10-core.config.php': '<?php // from the nearer base\n',
+    'flavors/f/flavor.yaml': 'extends: [c]\n',
   });
   const built = build({ flavorsRoot: root, flavor: 'f', tree: makeServerTree(), out: tempDir('out') });
   assert.equal(built.status, 0, built.stderr);
 
   const zip = readZip(built.stdout.trim());
-  assert.equal(text(zip, 'config/10-core.config.php'), '<?php // from the flavor\n');
+  assert.equal(text(zip, 'config/10-core.config.php'), '<?php // from the nearer base\n');
   assert.equal(text(zip, 'config/20-mail.config.php'), '<?php // base mail\n');
 });
 

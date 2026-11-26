@@ -27,6 +27,8 @@ export interface ResolvedFlavor {
   env: Map<string, EnvDeclaration>;
   /** Partial config files by file name, mapped to their source path; a later declaration replaces an earlier one. */
   configs: Map<string, string>;
+  /** The folders of the manifests in the order they were applied (parallel to `order`). */
+  dirs: string[];
 }
 
 type ManifestKind = 'flavor' | 'base';
@@ -126,7 +128,7 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
  */
 export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor {
   const resolved: ResolvedFlavor = {
-    name, order: [], apps: new Map(), appFolders: [], themes: [], env: new Map(), configs: new Map(),
+    name, order: [], apps: new Map(), appFolders: [], themes: [], env: new Map(), configs: new Map(), dirs: [],
   };
 
   const mergeIntoResolved = (manifest: Manifest): void => {
@@ -147,6 +149,7 @@ export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor
     for (const base of manifest.extends) resolveManifest('base', base, [...chain, label]);
     mergeIntoResolved(manifest);
     resolved.order.push(label);
+    resolved.dirs.push(join(flavorsRoot, folderOf(kind), manifestName));
   };
 
   resolveManifest('flavor', name, []);

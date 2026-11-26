@@ -5,6 +5,8 @@ import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassificatio
 import { InputError, requireOption } from './errors.ts';
 import { assertAppsCompatible } from './compat.ts';
 import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
+import { assembleAppConfig, removedApps } from './appconfig.ts';
+import { checkConfigs, checkEnvironment } from './configrules.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
@@ -203,6 +205,13 @@ function addPartialConfigs(tree: Tree, flavor: ResolvedFlavor): void {
   for (const [file, source] of flavor.configs) tree.set(`config/${file}`, new Uint8Array(readFileSync(source)));
 }
 
+/** The files the deployment reads: the app-config template, the settings the import cannot set, the removed apps. */
+function writeDeploymentFiles(tree: Tree, appConfig: ReturnType<typeof assembleAppConfig>, removed: string[]): void {
+  writeText(tree, 'app-config.json', JSON.stringify({ apps: appConfig.apps }, null, 2) + '\n');
+  writeText(tree, 'app-config-special.json', JSON.stringify(appConfig.special, null, 2) + '\n');
+  writeText(tree, 'removed-apps.json', JSON.stringify(removed, null, 2) + '\n');
+}
+
 /** A fixed timestamp (the earliest a zip can store), so the clock never leaks into an artifact. */
 const FIXED_TIME = new Date(1980, 0, 1, 0, 0, 0);
 
@@ -218,12 +227,17 @@ export interface BuildResult {
   artifact: string;
   /** What the build resolved the flavor to, for the build log. */
   flavor: ResolvedFlavor;
+  /** Warnings for the build log. */
+  warnings: string[];
 }
 
 /** Builds the artifact of one flavor. */
 export function buildArtifact(raw: RawBuildOptions): BuildResult {
   const options = validateOptions(raw);
   const flavor = resolveFlavor(options.flavorsRoot, options.flavor);
+  const configCheck = checkConfigs(flavor, options.flavorsRoot);
+  const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
+  const warnings = checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]));
   const tree = loadTree(options.tree);
   const release = baseRelease(tree);
   if (!release.startsWith(`${options.line}.`)) {
@@ -234,7 +248,9 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   assertNoDuplicateApps(apps);
   for (const warning of checkClassification(apps, flavor, options.kind)) process.stderr.write(`${warning}\n`);
   assertAppsCompatible(tree, flavor, release, options.tree, 'source tree');
+  const removed = removedApps(flavor, readShippedLists(tree).shippedApps);
   applyAppModes(tree, flavor);
+  writeDeploymentFiles(tree, appConfig, removed);
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
   dropInstallFlagAndUpdater(tree);
@@ -246,5 +262,5 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   mkdirSync(options.out, { recursive: true });
   const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);
   writeFileSync(artifact, zipTree(tree));
-  return { artifact, flavor };
+  return { artifact, flavor, warnings };
 }
