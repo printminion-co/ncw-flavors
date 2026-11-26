@@ -1,17 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zipSync } from 'fflate';
-import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps } from './apps.ts';
+import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps, removedApps } from './apps.ts';
 import { InputError, requireOption } from './errors.ts';
+import type { BuildKind } from './kind.ts';
 import { assertAppsCompatible } from './compat.ts';
 import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
-import { assembleAppConfig, removedApps } from './appconfig.ts';
+import { assembleAppConfig } from './appconfig.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
 import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, renderJson } from './util.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
-
-export type BuildKind = 'dev' | 'release';
 
 /** The options as the command line hands them over: not yet checked. */
 export interface RawBuildOptions {

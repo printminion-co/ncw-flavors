@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { InputError } from './errors.ts';
+import type { BuildKind } from './kind.ts';
 import { compareStrings, isPlainObject, renderJson, withSortedKeys } from './util.ts';
 
 /** The pipeline-supplied inputs for the build metadata, as the command line hands them over (not yet checked). */
@@ -73,7 +74,7 @@ function checkSha(option: string, value: string | undefined): string | undefined
 }
 
 /** Checks the metadata inputs. A release build needs the snapshot branch, release number and scope. */
-export function validateMetadataInputs(raw: RawMetadataOptions, kind: 'dev' | 'release'): MetadataInputs {
+export function validateMetadataInputs(raw: RawMetadataOptions, kind: BuildKind): MetadataInputs {
   if (kind === 'release') {
     if (!raw.snapshotBranch) throw new InputError('a release build needs --snapshot-branch');
     if (raw.releaseNumber === undefined) throw new InputError('a release build needs --release-number');
@@ -96,7 +97,7 @@ export function validateMetadataInputs(raw: RawMetadataOptions, kind: 'dev' | 'r
 }
 
 /** The content of `version.json`: sorted keys, two-space indent, final newline; absent inputs are left out. */
-export function renderMetadata(inputs: MetadataInputs, flavor: string, baseRelease: string, buildNumber: number, kind: 'dev' | 'release'): string {
+export function renderMetadata(inputs: MetadataInputs, flavor: string, baseRelease: string, buildNumber: number, kind: BuildKind): string {
   const fields: Record<string, unknown> = {
     flavor, base_release: baseRelease, build_number: buildNumber, kind,
     snapshot_branch: inputs.snapshotBranch, release_number: inputs.releaseNumber, scope: inputs.scope,

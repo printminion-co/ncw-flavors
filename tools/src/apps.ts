@@ -1,4 +1,5 @@
 import { InputError } from './errors.ts';
+import type { BuildKind } from './kind.ts';
 import { compareStrings } from './util.ts';
 import type { ResolvedFlavor } from './resolve.ts';
 import type { Files, ShippedLists } from './tree.ts';
@@ -41,11 +42,16 @@ export function assertNoDuplicateApps(apps: Map<string, string[]>): void {
   throw new InputError(`the same app id exists in more than one place: ${lines.join('; ')}`);
 }
 
+/** The apps the flavor removes that the server tree ships, sorted. */
+export function removedApps(flavor: ResolvedFlavor, shippedApps: string[]): string[] {
+  return [...flavor.apps].filter(([id, mode]) => mode === 'removed' && shippedApps.includes(id)).map(([id]) => id).sort(compareStrings);
+}
+
 /**
  * Every app needs an explicit mode. Returns the warnings for a dev build; fails a release build, naming
  * the unclassified apps.
  */
-export function checkClassification(apps: Map<string, string[]>, flavor: ResolvedFlavor, kind: 'dev' | 'release'): string[] {
+export function checkClassification(apps: Map<string, string[]>, flavor: ResolvedFlavor, kind: BuildKind): string[] {
   const unclassified = [...apps.keys()].filter((id) => !flavor.apps.has(id)).sort(compareStrings);
   if (kind === 'release' && unclassified.length > 0) {
     throw new InputError(`release builds need a mode for every app, unclassified apps: ${unclassified.join(', ')}`);

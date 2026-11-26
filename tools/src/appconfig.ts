@@ -111,8 +111,3 @@ export function assembleAppConfig(flavor: ResolvedFlavor, flavorsRoot: string): 
   const sortedSpecial = [...special.values()].sort((a, b) => compareStrings(a.app, b.app) || compareStrings(a.key, b.key));
   return { apps: sortedApps, special: sortedSpecial, envReferences };
 }
-
-/** The apps the flavor removes that the server tree ships, sorted. */
-export function removedApps(flavor: ResolvedFlavor, shippedApps: string[]): string[] {
-  return [...flavor.apps].filter(([id, mode]) => mode === 'removed' && shippedApps.includes(id)).map(([id]) => id).sort(compareStrings);
-}
