@@ -6,6 +6,7 @@ import { InputError } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 import { loadTree, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, isPlainObject } from './util.ts';
+import { THEMES_CONFIG } from './themes.ts';
 
 /** Config files the tool generates; each must be present. Add a name here when a build step generates another one. */
 export const GENERATED_CONFIGS: readonly string[] = ['00-apps-paths.config.php'];
@@ -40,7 +41,8 @@ const decode = (files: Files, path: string): string | undefined => {
 };
 
 function checkConfig(files: Files, flavor: ResolvedFlavor, violations: string[]): void {
-  const expected = new Set([...flavor.configs.keys(), ...GENERATED_CONFIGS]);
+  const themesConfig = flavor.themes.length > 0 ? [THEMES_CONFIG.slice('config/'.length)] : [];
+  const expected = new Set([...flavor.configs.keys(), ...GENERATED_CONFIGS, ...themesConfig]);
   const allowed = new Set([...expected, ...UPSTREAM_CONFIG_FILES]);
   const present = [...files.keys()].filter((path) => path.startsWith('config/'));
   for (const path of present) {

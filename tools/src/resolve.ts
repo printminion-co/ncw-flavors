@@ -62,6 +62,16 @@ export function assertValidFlavor(flavorsRoot: string, flavor: string): void {
   }
 }
 
+/** Names of bases and themes become folder names, so they follow the same rule as flavor names and are never paths. */
+function parsePlainNames(path: string, what: string, names: string[]): string[] {
+  for (const name of names) {
+    if (!FLAVOR_NAME.test(name)) {
+      throw new InputError(`${path}: ${what} "${name}" must be lowercase letters, digits and single hyphens, starting with a letter`);
+    }
+  }
+  return names;
+}
+
 function parseNames(path: string, field: string, value: unknown): string[] {
   if (value === undefined || value === null) return [];
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry === '')) {
@@ -120,9 +130,9 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
   }
   return {
     enforceTheme: typeof fields.enforce_theme === 'string' ? fields.enforce_theme : undefined,
-    extends: parseNames(path, 'extends', fields.extends),
+    extends: parsePlainNames(path, 'base name', parseNames(path, 'extends', fields.extends)),
     appFolders: parseNames(path, 'app_dirs', fields.app_dirs),
-    themes: parseNames(path, 'themes', fields.themes),
+    themes: parsePlainNames(path, 'theme name', parseNames(path, 'themes', fields.themes)),
     env: parseEnv(path, fields.env),
     apps,
     configs,

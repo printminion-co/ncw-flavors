@@ -119,8 +119,8 @@ with every violation on stderr, each naming the file or app. Warnings (an app wi
 go to stderr and do not fail.
 
 - Config: `config/` holds exactly the flavor's partial configs, the generated files (`GENERATED_CONFIGS` in
-  `validate.ts`, today `00-apps-paths.config.php`; each must be present) and upstream's `config.sample.php` and
-  `.htaccess`. Anything else is an unexpected file; a missing expected file is an error.
+  `validate.ts`, today `00-apps-paths.config.php`; each must be present, and `01-themes.config.php` when the flavor has
+  themes) and upstream's `config.sample.php` and `.htaccess`. Anything else is an unexpected file; a missing expected file is an error.
 - Apps: an app is a folder with `appinfo/info.xml` directly below `apps/` or an active app folder. A removed app
   that is present and a non-removed app of the flavor that is absent are errors. An app with no mode in the flavor
   is an error unless `version.json` says `kind` is `dev`, which makes it a warning.
