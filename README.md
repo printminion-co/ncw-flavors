@@ -43,6 +43,20 @@ per app, per config file name and per environment variable. Themes and app folde
 reached through more than one path is applied once, where it is first reached. A cycle in `extends` is rejected
 and the message names it.
 
+## Check app version compatibility
+
+```
+node src/cli.ts check-compat --flavors .. --flavor flavor1 --tree <server checkout>
+```
+
+Every app that stays in the artifact (in `apps/` and the active app folders) must accept the server version of the
+tree: the `min-version` and `max-version` of `<nextcloud>` in its `appinfo/info.xml` are compared only as far as
+they are written, so `max-version="33"` accepts 33.0.9. A missing or malformed bound is an error; removed apps are
+skipped. A failure exits with 2 and prints, to stderr, a GitHub Actions `::error file=...,title=App version
+compatibility::` annotation and a readable line per app naming the app, both bounds and the server version.
+`build` runs the same check on the source tree before assembling and on the assembled tree afterwards, for dev and
+release builds alike.
+
 ## Develop
 
 ```

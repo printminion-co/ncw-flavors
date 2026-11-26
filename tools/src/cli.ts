@@ -1,12 +1,16 @@
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { buildArtifact } from './build.ts';
+import { baseRelease, buildArtifact, loadTree } from './build.ts';
+import { assertAppsCompatible } from './compat.ts';
 import { InputError, requireOption } from './errors.ts';
 import { formatResolvedFlavor } from './report.ts';
 import { assertValidFlavor, resolveFlavor } from './resolve.ts';
 
 const USAGE = `usage:
   ncw build   --flavors <root> --flavor <name> --tree <dir> --line <nn> --kind <dev|release> --build-number <n> --out <dir>
-  ncw resolve --flavors <root> --flavor <name>`;
+  ncw resolve --flavors <root> --flavor <name>
+  ncw check-compat --flavors <root> --flavor <name> --tree <dir>`;
 
 function runBuild(args: string[]): number {
   const { values } = parseArgs({
@@ -45,10 +49,26 @@ function runResolve(args: string[]): number {
   return 0;
 }
 
+function runCheckCompat(args: string[]): number {
+  const { values } = parseArgs({ args, options: { flavors: { type: 'string' }, flavor: { type: 'string' }, tree: { type: 'string' } } });
+  const flavorsRoot = requireOption('--flavors', values.flavors);
+  const name = requireOption('--flavor', values.flavor);
+  const treeDir = requireOption('--tree', values.tree);
+
+  assertValidFlavor(flavorsRoot, name);
+  if (!existsSync(join(treeDir, 'version.php'))) {
+    throw new InputError(`the tree ${treeDir} does not exist or is not a Nextcloud tree (no version.php)`);
+  }
+  const tree = loadTree(treeDir);
+  assertAppsCompatible(tree, resolveFlavor(flavorsRoot, name), baseRelease(tree), treeDir, 'source tree');
+  return 0;
+}
+
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
   if (command === 'build') return runBuild(rest);
   if (command === 'resolve') return runResolve(rest);
+  if (command === 'check-compat') return runCheckCompat(rest);
   console.error(USAGE);
   return 2;
 }

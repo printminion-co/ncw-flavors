@@ -5,7 +5,10 @@ import { dirname, join } from 'node:path';
 export function addApp(tree: string, folder: string, id: string): void {
   const path = join(tree, folder, id, 'appinfo', 'info.xml');
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `<?xml version="1.0"?>\n<info><id>${id}</id><version>1.0.0</version></info>\n`);
+  writeFileSync(path, `<?xml version="1.0"?>
+<info><id>${id}</id><version>1.0.0</version>
+<dependencies><nextcloud min-version="33" max-version="33"/></dependencies></info>
+`);
 }
 
 /** Replaces the three shipped-apps lists of a fixture server tree. */

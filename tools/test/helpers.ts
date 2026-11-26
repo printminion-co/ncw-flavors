@@ -61,25 +61,33 @@ const SHIPPED = {
   alwaysEnabled: ['dav', 'files', 'workflowengine'],
 };
 
-function appInfo(id: string): string {
+/** Server version bounds of one fixture app; a string replaces the default "33", null leaves the attribute out. */
+export interface AppBounds {
+  min?: string | null;
+  max?: string | null;
+}
+
+function appInfo(id: string, bounds: AppBounds = {}): string {
+  const attr = (name: string, value: string | null | undefined): string =>
+    value === null ? '' : ` ${name}="${value ?? '33'}"`;
   return `<?xml version="1.0"?>
 <info><id>${id}</id><name>${id}</name><version>1.0.0</version>
-<dependencies><nextcloud min-version="33" max-version="33"/></dependencies></info>
+<dependencies><nextcloud${attr('min-version', bounds.min)}${attr('max-version', bounds.max)}/></dependencies></info>
 `;
 }
 
 /** A small stand-in for a built Nextcloud 33.0.9 server tree, as the official artifact lays it out. */
-export function makeServerTree(): string {
+export function makeServerTree(appBounds: Record<string, AppBounds> = {}): string {
   const root = tempDir('tree');
   put(root, 'version.php', VERSION_PHP);
   put(root, 'core/shipped.json', JSON.stringify(SHIPPED, null, 4) + '\n');
-  for (const id of SHIPPED.shippedApps) put(root, `apps/${id}/appinfo/info.xml`, appInfo(id));
+  for (const id of SHIPPED.shippedApps) put(root, `apps/${id}/appinfo/info.xml`, appInfo(id, appBounds[id]));
   put(root, 'config/CAN_INSTALL', '');
   put(root, 'config/config.sample.php', '<?php\n$CONFIG = [];\n');
   put(root, 'updater/index.php', '<?php // web updater\n');
   put(root, 'lib/base.php', '<?php // server code\n');
-  put(root, 'apps-flavor1/demo/appinfo/info.xml', appInfo('demo'));
-  put(root, 'apps-other/other/appinfo/info.xml', appInfo('other'));
+  put(root, 'apps-flavor1/demo/appinfo/info.xml', appInfo('demo', appBounds['demo']));
+  put(root, 'apps-other/other/appinfo/info.xml', appInfo('other', appBounds['other']));
   return root;
 }
 

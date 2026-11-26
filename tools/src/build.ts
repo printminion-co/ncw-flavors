@@ -3,6 +3,7 @@ import { join, relative } from 'node:path';
 import { zipSync } from 'fflate';
 import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps } from './apps.ts';
 import { InputError, requireOption } from './errors.ts';
+import { assertAppsCompatible } from './compat.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
@@ -61,9 +62,9 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
 }
 
 /** The files of a tree, by path relative to its root. */
-type Tree = Map<string, Uint8Array>;
+export type Tree = Map<string, Uint8Array>;
 
-function loadTree(root: string): Tree {
+export function loadTree(root: string): Tree {
   const tree: Tree = new Map();
   const walk = (folder: string): void => {
     for (const entry of readdirSync(folder, { withFileTypes: true })) {
@@ -90,7 +91,7 @@ function deleteWhere(tree: Tree, matches: (path: string) => boolean): void {
   for (const path of [...tree.keys()]) if (matches(path)) tree.delete(path);
 }
 
-function baseRelease(tree: Tree): string {
+export function baseRelease(tree: Tree): string {
   const match = /\$OC_VersionString\s*=\s*'([^']+)'/.exec(readText(tree, 'version.php'));
   if (!match?.[1]) throw new InputError('the tree has no $OC_VersionString in its version file');
   return match[1];
@@ -226,13 +227,14 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   const apps = discoverApps(tree, flavor);
   assertNoDuplicateApps(apps);
   for (const warning of checkClassification(apps, flavor, options.kind)) process.stderr.write(`${warning}\n`);
-
+  assertAppsCompatible(tree, flavor, release, options.tree, 'source tree');
   applyAppModes(tree, flavor);
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
   dropInstallFlagAndUpdater(tree);
   writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
   rewriteVersionFile(tree);
+  assertAppsCompatible(tree, flavor, release, options.tree, 'assembled tree');
 
   mkdirSync(options.out, { recursive: true });
   const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);
