@@ -13,4 +13,12 @@ This repository starts with the design:
 Status: design only, nothing is implemented yet. Flavors, bases, themes and build tooling will live on per-line
 branches (`v33`, `v34`, ...) of this repository, next to this `main`.
 
-No license has been chosen yet.
+## License
+
+Copyright (C) the ncw-flavors contributors.
+
+This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General
+Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option)
+any later version. See [LICENSE](LICENSE). SPDX-License-Identifier: AGPL-3.0-or-later
+
+The IONOS marks and the Nextcloud marks remain trademarks of their owners; this license grants no rights to them.
