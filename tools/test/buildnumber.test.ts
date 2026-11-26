@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { build, defaultFlavorsRoot, makeServerTree, readZip, runCli, tempDir, text } from './helpers.ts';
 
-const rejected: [string, string[], string][] = [
+const rejectedBuildNumbers: [string, string[], string][] = [
   ['missing', [], '--build-number'],
   ['negative', ['--build-number=-5'], '-5'],
   ['fractional', ['--build-number', '1.5'], '1.5'],
@@ -12,8 +12,8 @@ const rejected: [string, string[], string][] = [
   ['with leading zeros', ['--build-number', '007'], '007'],
   ['empty', ['--build-number', ''], '--build-number'],
 ];
-for (const [name, args, mention] of rejected) {
-  test(`a ${name} build number is rejected before packaging`, () => {
+for (const [name, args, mention] of rejectedBuildNumbers) {
+  test(`a ${name} build number is rejectedBuildNumbers before packaging`, () => {
     const out = tempDir('out');
     const result = runCli(['build', '--flavors', defaultFlavorsRoot(), '--flavor', 'flavor1', '--tree', makeServerTree(),
       '--line', '33', '--kind', 'dev', ...args, '--out', out]);

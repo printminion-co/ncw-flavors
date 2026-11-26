@@ -31,7 +31,9 @@ const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const WHOLE_PLACEHOLDER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
 
 function placeholdersIn(value: string, file: string, into: Map<string, string>): void {
-  for (const m of value.matchAll(PLACEHOLDER)) if (!into.has(m[1] as string)) into.set(m[1] as string, file);
+  for (const placeholder of value.matchAll(PLACEHOLDER)) {
+    if (!into.has(placeholder[1] as string)) into.set(placeholder[1] as string, file);
+  }
 }
 
 /**
@@ -47,48 +49,48 @@ export function assembleAppConfig(flavor: ResolvedFlavor, flavorsRoot: string): 
   for (const dir of flavor.dirs) {
     const path = join(dir, 'app-config.json');
     if (!existsSync(path)) continue;
-    const rel = relativePosix(flavorsRoot, path);
-    const fail = (message: string): never => { throw new InputError(`${rel}: ${message}`); };
+    const file = relativePosix(flavorsRoot, path);
+    const rejectFile = (message: string): never => { throw new InputError(`${file}: ${message}`); };
 
     let document: unknown;
     try {
       document = JSON.parse(readFileSync(path, 'utf8'));
     } catch {
-      return fail('is not valid JSON');
+      return rejectFile('is not valid JSON');
     }
-    if (!isPlainObject(document)) return fail('must be a JSON object');
+    if (!isPlainObject(document)) return rejectFile('must be a JSON object');
     for (const section of Object.keys(document)) {
-      if (section !== 'apps' && section !== 'special') fail(`unknown section "${section}", only "apps" and "special" are allowed (the system section is never used)`);
+      if (section !== 'apps' && section !== 'special') rejectFile(`unknown section "${section}", only "apps" and "special" are allowed (the system section is never used)`);
     }
 
-    const plain = document.apps ?? {};
-    if (!isPlainObject(plain)) return fail('"apps" must be an object of app to key to value');
-    for (const [app, keys] of Object.entries(plain)) {
-      if (!isPlainObject(keys)) return fail(`apps.${app} must be an object of key to value`);
+    const plainApps = document.apps ?? {};
+    if (!isPlainObject(plainApps)) return rejectFile('"apps" must be an object of app to key to value');
+    for (const [app, keys] of Object.entries(plainApps)) {
+      if (!isPlainObject(keys)) return rejectFile(`apps.${app} must be an object of key to value`);
       for (const [key, value] of Object.entries(keys)) {
         if (value !== null && typeof value !== 'string' && !Number.isInteger(value)) {
-          fail(`apps.${app}.${key} must be a string, an integer or null`);
+          rejectFile(`apps.${app}.${key} must be a string, an integer or null`);
         }
-        if (typeof value === 'string') placeholdersIn(value, rel, envReferences);
+        if (typeof value === 'string') placeholdersIn(value, file, envReferences);
         (apps[app] ??= {})[key] = value as PlainValue;
       }
     }
 
-    const list = document.special ?? [];
-    if (!Array.isArray(list)) return fail('"special" must be a list');
-    for (const entry of list) {
+    const specialEntries = document.special ?? [];
+    if (!Array.isArray(specialEntries)) return rejectFile('"special" must be a list');
+    for (const entry of specialEntries) {
       if (!isPlainObject(entry) || typeof entry.app !== 'string' || typeof entry.key !== 'string' || typeof entry.value !== 'string') {
-        return fail('every special entry needs a string app, key and value');
+        return rejectFile('every special entry needs a string app, key and value');
       }
       const where = `special ${entry.app}.${entry.key}`;
-      if (entry.type !== undefined && !TYPES.includes(entry.type as string)) fail(`${where}: type must be one of ${TYPES.join(', ')}`);
+      if (entry.type !== undefined && !TYPES.includes(entry.type as string)) rejectFile(`${where}: type must be one of ${TYPES.join(', ')}`);
       for (const flag of ['lazy', 'sensitive'] as const) {
-        if (entry[flag] !== undefined && typeof entry[flag] !== 'boolean') fail(`${where}: ${flag} must be true or false`);
+        if (entry[flag] !== undefined && typeof entry[flag] !== 'boolean') rejectFile(`${where}: ${flag} must be true or false`);
       }
       if (entry.sensitive === true && !WHOLE_PLACEHOLDER.test(entry.value)) {
-        fail(`${where} is sensitive, so its value must be a \${VAR} placeholder filled from the environment, not a literal`);
+        rejectFile(`${where} is sensitive, so its value must be a \${VAR} placeholder filled from the environment, not a literal`);
       }
-      placeholdersIn(entry.value, rel, envReferences);
+      placeholdersIn(entry.value, file, envReferences);
       const setting: SpecialSetting = { app: entry.app, key: entry.key, value: entry.value };
       if (entry.type !== undefined) setting.type = entry.type as SpecialSetting['type'];
       if (entry.lazy === true) setting.lazy = true;

@@ -14,7 +14,7 @@ function jsonFile(content: unknown): string {
 }
 
 /** Builds with extra options; returns the CLI result and the metadata file text (when an artifact was made). */
-function run(extra: string[], kind = 'release') {
+function buildWithOptions(extra: string[], kind = 'release') {
   const out = tempDir('out');
   const result = build({ tree: makeServerTree(), out, kind, extra });
   const artifact = result.stdout.trim();
@@ -26,7 +26,7 @@ const RELEASE = ['--snapshot-branch', 'snapshot/33.0.9', '--release-number', '3'
 test('a release build writes every field of the build metadata', () => {
   const apps = jsonFile({ calendar: { commit: 'c'.repeat(40), describe: 'v5.0.1-3-gabcdef0' }, activity: { commit: 'd'.repeat(40), describe: 'v4.1.0' } });
   const cache = jsonFile({ calendar: { key: 'calendar-5.0.1-k1', checksum: 'sha256:11' } });
-  const { result, meta } = run([...RELEASE, '--server-commit', SERVER, '--flavors-commit', FLAVORS, '--app-pins', apps, '--cache-keys', cache]);
+  const { result, meta } = buildWithOptions([...RELEASE, '--server-commit', SERVER, '--flavors-commit', FLAVORS, '--app-pins', apps, '--cache-keys', cache]);
 
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(meta), {
@@ -49,8 +49,8 @@ test('a release build writes every field of the build metadata', () => {
 
 test('the metadata file is pretty JSON with sorted keys and a final newline, equal for equal inputs', () => {
   const apps = jsonFile({ zeta: { describe: 'v1', commit: 'c'.repeat(40) }, alpha: { commit: 'd'.repeat(40), describe: 'v2' } });
-  const first = run([...RELEASE, '--app-pins', apps]).meta;
-  const second = run([...RELEASE, '--app-pins', apps]).meta;
+  const first = buildWithOptions([...RELEASE, '--app-pins', apps]).meta;
+  const second = buildWithOptions([...RELEASE, '--app-pins', apps]).meta;
 
   assert.equal(first, second);
   assert.equal(first, `{
@@ -77,7 +77,7 @@ test('the metadata file is pretty JSON with sorted keys and a final newline, equ
 });
 
 test('a dev build needs no snapshot branch, release number or scope and leaves them out', () => {
-  const { result, meta } = run([], 'dev');
+  const { result, meta } = buildWithOptions([], 'dev');
 
   assert.equal(result.status, 0, result.stderr);
   assert.deepEqual(JSON.parse(meta), { flavor: 'flavor1', base_release: '33.0.9', build_number: 812, kind: 'dev', apps: {}, cached_builds: {} });
@@ -92,7 +92,7 @@ test('the build number given with --build-number is recorded as an integer', () 
 });
 
 test('a dev build records the snapshot inputs when they are given', () => {
-  const { meta } = run(['--release-number', '2'], 'dev');
+  const { meta } = buildWithOptions(['--release-number', '2'], 'dev');
   assert.equal(JSON.parse(meta).release_number, 2);
 });
 
@@ -100,7 +100,7 @@ for (const missing of ['--snapshot-branch', '--release-number', '--scope']) {
   test(`a release build without ${missing} is rejected, naming the option`, () => {
     const args = [...RELEASE];
     args.splice(args.indexOf(missing), 2);
-    const { result, out } = run(args);
+    const { result, out } = buildWithOptions(args);
 
     assert.equal(result.status, 2);
     assert.ok(result.stderr.includes(missing), result.stderr);
@@ -109,7 +109,7 @@ for (const missing of ['--snapshot-branch', '--release-number', '--scope']) {
   });
 }
 
-const bad: [string, string[], string[]][] = [
+const invalidInputs: [string, string[], string[]][] = [
   ['a release number of zero', ['--release-number', '0'], ['--release-number', '0']],
   ['a release number that is not a number', ['--release-number', 'x1'], ['--release-number', 'x1']],
   ['a negative release number', ['--release-number=-2'], ['--release-number', '-2']],
@@ -118,19 +118,19 @@ const bad: [string, string[], string[]][] = [
   ['a flavors commit that is too short', ['--flavors-commit', 'abc'], ['--flavors-commit', 'abc']],
   ['app pins that are not JSON', ['--app-pins', jsonFile('{nope')], ['--app-pins']],
   ['an app pin without a describe', ['--app-pins', jsonFile({ calendar: { commit: 'c'.repeat(40) } })], ['calendar', 'describe']],
-  ['an app pin with a bad commit', ['--app-pins', jsonFile({ calendar: { commit: 'zz', describe: 'v1' } })], ['calendar', 'commit']],
+  ['an app pin with a invalidInputs commit', ['--app-pins', jsonFile({ calendar: { commit: 'zz', describe: 'v1' } })], ['calendar', 'commit']],
   ['an app pin with an unknown field', ['--app-pins', jsonFile({ calendar: { commit: 'c'.repeat(40), describe: 'v1', extra: 1 } })], ['calendar', 'extra']],
   ['app pins that are a list', ['--app-pins', jsonFile([])], ['--app-pins']],
   ['app pins file that does not exist', ['--app-pins', '/does/not/exist.json'], ['/does/not/exist.json']],
   ['a cache entry without a checksum', ['--cache-keys', jsonFile({ calendar: { key: 'k' } })], ['calendar', 'checksum']],
   ['a cache entry with an empty key', ['--cache-keys', jsonFile({ calendar: { key: '', checksum: 'c' } })], ['calendar', 'key']],
 ];
-for (const [name, extra, mentions] of bad) {
+for (const [name, extra, mentions] of invalidInputs) {
   test(`build rejects ${name} before packaging`, () => {
     const base = [...RELEASE];
     const at = base.indexOf(extra[0] as string);
     if (at >= 0) base.splice(at, 2);
-    const { result, out } = run([...base, ...extra]);
+    const { result, out } = buildWithOptions([...base, ...extra]);
     assert.ok(!existsSync(out) || readdirSync(out).length === 0, 'no artifact may be written');
 
     assert.equal(result.status, 2, result.stderr);

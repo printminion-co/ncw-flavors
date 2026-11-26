@@ -3,10 +3,10 @@ import { existsSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { build, configAsNextcloudSeesIt, hasPhp, makeFlavorsRoot, makeServerTree, readZip, tempDir } from './helpers.ts';
 
-const cfg = (body: string): string => `<?php\n$CONFIG = [\n${body}\n];\n`;
+const configPhp = (body: string): string => `<?php\n$CONFIG = [\n${body}\n];\n`;
 
 /** Builds flavor `f` (extending base `b`) from the given extra files and returns the CLI result and the out dir. */
-function buildF(files: Record<string, string>, flavorYaml = 'extends: [b]\n', baseYaml = '') {
+function buildFlavorF(files: Record<string, string>, flavorYaml = 'extends: [b]\n', baseYaml = '') {
   const flavorsRoot = makeFlavorsRoot({ 'bases/b/flavor.yaml': baseYaml, 'flavors/f/flavor.yaml': flavorYaml, ...files });
   const out = tempDir('out');
   const result = build({ flavorsRoot, flavor: 'f', tree: makeServerTree(), out });
@@ -14,11 +14,11 @@ function buildF(files: Record<string, string>, flavorYaml = 'extends: [b]\n', ba
 }
 
 test('configs of bases and flavor are shipped so that a lexical load applies them in number order, later wins', { skip: !hasPhp && 'php is not installed' }, () => {
-  const { result } = buildF({
-    'bases/b/config/30-b.config.php': cfg("'k' => 'base30', 'only_b' => 1,"),
-    'bases/b/config/10-a.config.php': cfg("'k' => 'base10', 'only_a' => 1,"),
-    'flavors/f/config/60-f.config.php': cfg("'k' => 'flavor60'"),
-    'flavors/f/config/50-e.config.php': cfg("'k' => 'flavor50', 'only_e' => 1,"),
+  const { result } = buildFlavorF({
+    'bases/b/config/30-b.config.php': configPhp("'k' => 'base30', 'only_b' => 1,"),
+    'bases/b/config/10-a.config.php': configPhp("'k' => 'base10', 'only_a' => 1,"),
+    'flavors/f/config/60-f.config.php': configPhp("'k' => 'flavor60'"),
+    'flavors/f/config/50-e.config.php': configPhp("'k' => 'flavor50', 'only_e' => 1,"),
   });
   assert.equal(result.status, 0, result.stderr);
   const zip = readZip(result.stdout.trim());
@@ -30,10 +30,10 @@ test('configs of bases and flavor are shipped so that a lexical load applies the
 });
 
 test('two config files with the same number in one resolved flavor are rejected and the message names both', () => {
-  const { result, out } = buildF({
-    'bases/b/config/20-mail.config.php': cfg(''),
-    'flavors/f/config/50-one.config.php': cfg(''),
-    'flavors/f/config/50-two.config.php': cfg(''),
+  const { result, out } = buildFlavorF({
+    'bases/b/config/20-mail.config.php': configPhp(''),
+    'flavors/f/config/50-one.config.php': configPhp(''),
+    'flavors/f/config/50-two.config.php': configPhp(''),
   });
   assert.equal(result.status, 2);
   assert.match(result.stderr, /number 50/);
@@ -43,27 +43,27 @@ test('two config files with the same number in one resolved flavor are rejected 
 });
 
 test('a duplicate number across two bases of one flavor is rejected too', () => {
-  const { result } = buildF({
+  const { result } = buildFlavorF({
     'bases/c/flavor.yaml': '',
-    'bases/c/config/20-mail.config.php': cfg(''),
-    'bases/b/config/20-other.config.php': cfg(''),
+    'bases/c/config/20-mail.config.php': configPhp(''),
+    'bases/b/config/20-other.config.php': configPhp(''),
   }, 'extends: [b]\n', 'extends: [c]\n');
   assert.equal(result.status, 2);
   assert.match(result.stderr, /number 20/);
 });
 
 test('the same file name in a nearer base replaces the earlier one and is not a duplicate', () => {
-  const { result } = buildF({
+  const { result } = buildFlavorF({
     'bases/c/flavor.yaml': '',
-    'bases/c/config/20-x.config.php': cfg(''),
-    'bases/b/config/20-x.config.php': cfg(''),
+    'bases/c/config/20-x.config.php': configPhp(''),
+    'bases/b/config/20-x.config.php': configPhp(''),
   }, 'extends: [b]\n', 'extends: [c]\n');
   assert.equal(result.status, 0, result.stderr);
 });
 
 test('a config name without a two digit number prefix is an input error', () => {
   for (const file of ['bases/b/config/unnumbered.config.php', 'flavors/f/config/5-short.config.php', 'flavors/f/config/50.config.php']) {
-    const { result, out } = buildF({ [file]: cfg('') });
+    const { result, out } = buildFlavorF({ [file]: configPhp('') });
     assert.equal(result.status, 2, file);
     assert.match(result.stderr, new RegExp(file.split('/').pop()!.replace(/\./g, '\\.')));
     assert.equal(existsSync(out) ? readdirSync(out).length : 0, 0, 'no artifact is written');
@@ -72,7 +72,7 @@ test('a config name without a two digit number prefix is an input error', () => 
 
 test('numbers 00 to 09 are reserved for generated files, in a base and in a flavor', () => {
   for (const file of ['bases/b/config/05-low.config.php', 'flavors/f/config/00-mine.config.php', 'flavors/f/config/09-mine.config.php']) {
-    const { result } = buildF({ [file]: cfg('') });
+    const { result } = buildFlavorF({ [file]: configPhp('') });
     assert.equal(result.status, 2, file);
     assert.match(result.stderr, /reserved/);
     assert.ok(result.stderr.includes(file), result.stderr);
@@ -80,11 +80,11 @@ test('numbers 00 to 09 are reserved for generated files, in a base and in a flav
 });
 
 test('a number outside the convention is only a warning and the build succeeds', () => {
-  const { result } = buildF({
-    'bases/b/config/50-high.config.php': cfg(''),
-    'flavors/f/config/49-low.config.php': cfg(''),
-    'flavors/f/config/90-late.config.php': cfg(''),
-    'flavors/f/config/99-last.config.php': cfg(''),
+  const { result } = buildFlavorF({
+    'bases/b/config/50-high.config.php': configPhp(''),
+    'flavors/f/config/49-low.config.php': configPhp(''),
+    'flavors/f/config/90-late.config.php': configPhp(''),
+    'flavors/f/config/99-last.config.php': configPhp(''),
   });
   assert.equal(result.status, 0, result.stderr);
   for (const file of ['bases/b/config/50-high.config.php', 'flavors/f/config/49-low.config.php', 'flavors/f/config/90-late.config.php', 'flavors/f/config/99-last.config.php']) {
@@ -97,7 +97,7 @@ test('a number outside the convention is only a warning and the build succeeds',
 });
 
 test('numbers inside the convention give no warning', () => {
-  const { result } = buildF({ 'bases/b/config/10-a.config.php': cfg(''), 'bases/b/config/49-b.config.php': cfg(''), 'flavors/f/config/50-c.config.php': cfg(''), 'flavors/f/config/89-d.config.php': cfg('') });
+  const { result } = buildFlavorF({ 'bases/b/config/10-a.config.php': configPhp(''), 'bases/b/config/49-b.config.php': configPhp(''), 'flavors/f/config/50-c.config.php': configPhp(''), 'flavors/f/config/89-d.config.php': configPhp('') });
   assert.equal(result.status, 0, result.stderr);
   assert.doesNotMatch(result.stderr, /warning: config file/);
 });

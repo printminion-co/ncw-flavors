@@ -4,10 +4,13 @@ import { InputError } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 import { assertServerTree, loadServerTree, readText } from './tree.ts';
 
-const TITLE = 'App version compatibility';
+const ANNOTATION_TITLE = 'App version compatibility';
+
+/** Where in the build the check runs: on the checkout as given, or on the tree after the flavor was applied. */
+export type CheckStage = 'source tree' | 'assembled tree';
 
 /** Splits a version into numbers; null when it is not dot-separated digits. */
-function parts(version: string): number[] | null {
+function versionNumbers(version: string): number[] | null {
   return /^[0-9]+(\.[0-9]+)*$/.test(version) ? version.split('.').map(Number) : null;
 }
 
@@ -22,23 +25,24 @@ function compareAsFarAsWritten(server: number[], bound: number[]): number {
 }
 
 /** Why the bounds do not accept the server version, or null when they do. */
-function problem(min: string | undefined, max: string | undefined, server: string): string | null {
+function incompatibility(min: string | undefined, max: string | undefined, server: string): string | null {
   if (min === undefined || max === undefined) {
     const missing = [min === undefined ? 'min-version' : '', max === undefined ? 'max-version' : ''].filter(Boolean);
     return `${missing.join(' and ')} missing`;
   }
-  const minParts = parts(min);
-  const maxParts = parts(max);
-  const serverParts = parts(server) as number[];
-  if (!minParts || !maxParts) return 'bounds must be version numbers such as 33 or 33.0';
-  if (compareAsFarAsWritten(serverParts, minParts) < 0) return 'server is older than min-version';
-  if (compareAsFarAsWritten(serverParts, maxParts) > 0) return 'server is newer than max-version';
+  const minNumbers = versionNumbers(min);
+  const maxNumbers = versionNumbers(max);
+  const serverNumbers = versionNumbers(server) as number[];
+  if (!minNumbers || !maxNumbers) return 'bounds must be version numbers such as 33 or 33.0';
+  if (compareAsFarAsWritten(serverNumbers, minNumbers) < 0) return 'server is older than min-version';
+  if (compareAsFarAsWritten(serverNumbers, maxNumbers) > 0) return 'server is newer than max-version';
   return null;
 }
 
 /**
  * Fails when an app that stays in the tree does not accept the server version. `files` maps tree paths to
- * content; `fileRoot` is the directory the annotations point into (the source checkout). Writes one GitHub
+ * content; `fileRoot` is the source checkout the annotations point into. At the assembled stage the file is named by
+ * its source path and the annotation title names the stage, since the assembled tree is not on disk. Writes one GitHub
  * Actions error annotation and one readable line per offending app to stderr, then throws.
  */
 export function assertAppsCompatible(
@@ -46,8 +50,9 @@ export function assertAppsCompatible(
   flavor: ResolvedFlavor,
   serverVersion: string,
   fileRoot: string,
-  stage: string,
+  stage: CheckStage,
 ): void {
+  const title = stage === 'source tree' ? ANNOTATION_TITLE : `${ANNOTATION_TITLE} (${stage})`;
   const failures: string[] = [];
   for (const [id, folders] of discoverApps(files, flavor)) {
     if (flavor.apps.get(id) === 'removed') continue;
@@ -57,11 +62,11 @@ export function assertAppsCompatible(
       const bound = (name: string): string | undefined => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
       const min = bound('min-version');
       const max = bound('max-version');
-      const why = problem(min, max, serverVersion);
-      if (why === null) continue;
+      const reason = incompatibility(min, max, serverVersion);
+      if (reason === null) continue;
 
-      const message = `app "${id}": min-version ${min === undefined ? '(missing)' : `"${min}"`}, max-version ${max === undefined ? '(missing)' : `"${max}"`} do not accept server version ${serverVersion} (${why})`;
-      process.stderr.write(`::error file=${join(fileRoot, path)},title=${TITLE}::${message}\n`);
+      const message = `app "${id}": min-version ${min === undefined ? '(missing)' : `"${min}"`}, max-version ${max === undefined ? '(missing)' : `"${max}"`} do not accept server version ${serverVersion} (${reason})`;
+      process.stderr.write(`::error file=${join(fileRoot, path)},title=${title}::${message}\n`);
       failures.push(message);
     }
   }

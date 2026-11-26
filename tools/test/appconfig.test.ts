@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { build, makeFlavorsRoot, makeServerTree, readZip, tempDir, text } from './helpers.ts';
 
-function buildF(files: Record<string, string>, flavorYaml = 'extends: [b]\n') {
+function buildFlavorF(files: Record<string, string>, flavorYaml = 'extends: [b]\n') {
   const flavorsRoot = makeFlavorsRoot({ 'bases/b/flavor.yaml': '', 'flavors/f/flavor.yaml': flavorYaml, ...files });
   const out = tempDir('out');
   const result = build({ flavorsRoot, flavor: 'f', tree: makeServerTree(), out });
@@ -12,7 +12,7 @@ function buildF(files: Record<string, string>, flavorYaml = 'extends: [b]\n') {
 const json = (value: unknown): string => JSON.stringify(value);
 
 test('without any app-config source the artifact has an empty template, an empty special list and the removed apps', () => {
-  const { result } = buildF({}, 'extends: [b]\napps:\n  workflowengine: removed\n  firstrunwizard: removed\n  ghost: removed\n  files: always\n');
+  const { result } = buildFlavorF({}, 'extends: [b]\napps:\n  workflowengine: removed\n  firstrunwizard: removed\n  ghost: removed\n  files: always\n');
   assert.equal(result.status, 0, result.stderr);
   const zip = readZip(result.stdout.trim());
   assert.deepEqual(JSON.parse(text(zip, 'app-config.json')), { apps: {} });
@@ -22,7 +22,7 @@ test('without any app-config source the artifact has an empty template, an empty
 });
 
 test('the template is assembled from bases and the flavor, later wins per app and key, null stays to delete a key', () => {
-  const { result } = buildF({
+  const { result } = buildFlavorF({
     'bases/b/app-config.json': json({ apps: { files: { max_chunk: 10, shared: 'base' }, theming: { color: '#000' } } }),
     'flavors/f/app-config.json': json({ apps: { files: { shared: 'flavor', old: null }, activity: { retention: 30 } } }),
   });
@@ -40,7 +40,7 @@ test('the template is assembled from bases and the flavor, later wins per app an
 });
 
 test('sensitive, lazy and typed settings are listed separately, merged by app and key, sorted', () => {
-  const { result } = buildF({
+  const { result } = buildFlavorF({
     'bases/b/app-config.json': json({ special: [
       { app: 'ldap', key: 'bind', value: '${LDAP_PASSWORD}', sensitive: true },
       { app: 'files', key: 'limit', value: '5', type: 'integer' },
@@ -59,7 +59,7 @@ test('sensitive, lazy and typed settings are listed separately, merged by app an
 });
 
 test('a sensitive value that is a literal is an input error and the literal never reaches the output', () => {
-  const { result, out } = buildF({
+  const { result, out } = buildFlavorF({
     'bases/b/app-config.json': json({ special: [{ app: 'ldap', key: 'bind', value: 'hunter2', sensitive: true }] }),
   });
   assert.equal(result.status, 2);
@@ -70,28 +70,28 @@ test('a sensitive value that is a literal is an input error and the literal neve
 
 test('a placeholder in the template that is not declared is an input error, a declared one is kept as a placeholder', () => {
   const files = { 'flavors/f/app-config.json': json({ apps: { mail: { host: '${MAIL_HOST}' } } }) };
-  const bad = buildF(files);
-  assert.equal(bad.result.status, 2);
-  assert.match(bad.result.stderr, /MAIL_HOST.*not declared/);
+  const invalid = buildFlavorF(files);
+  assert.equal(invalid.result.status, 2);
+  assert.match(invalid.result.stderr, /MAIL_HOST.*not declared/);
 
-  const good = buildF(files, 'extends: [b]\nenv:\n  - name: MAIL_HOST\n    default: secret-looking-default\n');
-  assert.equal(good.result.status, 0, good.result.stderr);
-  const zip = readZip(good.result.stdout.trim());
+  const valid = buildFlavorF(files, 'extends: [b]\nenv:\n  - name: MAIL_HOST\n    default: secret-looking-default\n');
+  assert.equal(valid.result.status, 0, valid.result.stderr);
+  const zip = readZip(valid.result.stdout.trim());
   assert.equal(text(zip, 'app-config.json').includes('${MAIL_HOST}'), true);
   assert.doesNotMatch(text(zip, 'app-config.json'), /secret-looking-default/);
-  assert.doesNotMatch(good.result.stderr, /warning: environment variable/, 'a variable used in the template counts as used');
+  assert.doesNotMatch(valid.result.stderr, /warning: environment variable/, 'a variable used in the template counts as used');
 });
 
 test('a malformed app-config source is an input error that names the file', () => {
   for (const content of ['{', json({ apps: { files: { k: true } } }), json({ apps: [] }), json({ special: [{ app: 'a', key: 'k', value: '1', type: 'weird' }] }), json({ system: {} })]) {
-    const { result } = buildF({ 'flavors/f/app-config.json': content });
+    const { result } = buildFlavorF({ 'flavors/f/app-config.json': content });
     assert.equal(result.status, 2, content);
     assert.match(result.stderr, /flavors\/f\/app-config\.json/);
   }
 });
 
 test('the same app and key in both apps and special is an input error', () => {
-  const { result } = buildF({
+  const { result } = buildFlavorF({
     'bases/b/app-config.json': json({ apps: { files: { limit: 1 } } }),
     'flavors/f/app-config.json': json({ special: [{ app: 'files', key: 'limit', value: '2', lazy: true }] }),
   });

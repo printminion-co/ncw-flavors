@@ -55,7 +55,7 @@ $OC_Build = '2026-09-10T13:26:23+00:00 4d7d05e778398cdce1428b20d8687386edbc8268'
 $vendor = 'nextcloud';
 `;
 
-const SHIPPED = {
+const SHIPPED_LISTS = {
   shippedApps: ['activity', 'dav', 'files', 'firstrunwizard', 'workflowengine'],
   defaultEnabled: ['activity', 'dav', 'files', 'firstrunwizard'],
   alwaysEnabled: ['dav', 'files', 'workflowengine'],
@@ -80,8 +80,8 @@ function appInfo(id: string, bounds: AppBounds = {}): string {
 export function makeServerTree(appBounds: Record<string, AppBounds> = {}): string {
   const root = tempDir('tree');
   put(root, 'version.php', VERSION_PHP);
-  put(root, 'core/shipped.json', JSON.stringify(SHIPPED, null, 4) + '\n');
-  for (const id of SHIPPED.shippedApps) put(root, `apps/${id}/appinfo/info.xml`, appInfo(id, appBounds[id]));
+  put(root, 'core/shipped.json', JSON.stringify(SHIPPED_LISTS, null, 4) + '\n');
+  for (const id of SHIPPED_LISTS.shippedApps) put(root, `apps/${id}/appinfo/info.xml`, appInfo(id, appBounds[id]));
   put(root, 'config/CAN_INSTALL', '');
   put(root, 'config/config.sample.php', '<?php\n$CONFIG = [];\n');
   put(root, 'updater/index.php', '<?php // web updater\n');
@@ -98,8 +98,8 @@ export interface CliResult {
 }
 
 export function runCli(args: string[]): CliResult {
-  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
-  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+  const spawned = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
+  return { status: spawned.status, stdout: spawned.stdout, stderr: spawned.stderr };
 }
 
 export interface BuildOptions {
@@ -115,10 +115,10 @@ export interface BuildOptions {
   extra?: string[];
 }
 
-/** Runs `build` with sensible defaults; the flavors come from a fixture root unless one is given. */
 /** What a release build needs besides the common options; tests that do not care about it get these. */
 const RELEASE_DEFAULTS = ['--snapshot-branch', 'rc/ncw-v33-1', '--release-number', '1', '--scope', 'fixture release'];
 
+/** Runs `build` with sensible defaults; the flavors come from a fixture root unless one is given. */
 export function build(o: BuildOptions): CliResult {
   const extra = o.extra ?? (o.kind === 'release' ? RELEASE_DEFAULTS : []);
   return runCli([
@@ -155,10 +155,10 @@ export function versionAsNextcloudSeesIt(zip: Map<string, Uint8Array>, withBuild
   const dir = tempDir('php');
   writeFileSync(join(dir, 'version.php'), zip.get('version.php') ?? '');
   if (withBuildNumber) writeFileSync(join(dir, '.buildnumber'), zip.get('.buildnumber') ?? '');
-  const r = spawnSync('php', ['-r', 'include $argv[1]; echo json_encode([$OC_Version, $OC_Channel]);', join(dir, 'version.php')], { encoding: 'utf8' });
+  const evaluated = spawnSync('php', ['-r', 'include $argv[1]; echo json_encode([$OC_Version, $OC_Channel]);', join(dir, 'version.php')], { encoding: 'utf8' });
   rmSync(dir, { recursive: true, force: true });
-  if (r.status !== 0) throw new Error(`php failed: ${r.stderr}`);
-  return r.stdout;
+  if (evaluated.status !== 0) throw new Error(`php failed: ${evaluated.stderr}`);
+  return evaluated.stdout;
 }
 
 /**
@@ -170,10 +170,10 @@ export function configAsNextcloudSeesIt(zip: Map<string, Uint8Array>, entry: str
   const file = join(dir, 'partial.config.php');
   writeFileSync(file, zip.get(entry) ?? '');
   const code = 'class OC { public static $SERVERROOT = ' + JSON.stringify(serverRoot) + '; } include $argv[1]; echo json_encode($CONFIG);';
-  const r = spawnSync('php', ['-r', code, file], { encoding: 'utf8' });
+  const evaluated = spawnSync('php', ['-r', code, file], { encoding: 'utf8' });
   rmSync(dir, { recursive: true, force: true });
-  if (r.status !== 0) throw new Error(`php failed: ${r.stderr}`);
-  return r.stdout;
+  if (evaluated.status !== 0) throw new Error(`php failed: ${evaluated.stderr}`);
+  return evaluated.stdout;
 }
 
 /** The DOS date and time stored for every entry of an artifact, read from its central directory. */

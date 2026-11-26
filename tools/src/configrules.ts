@@ -38,18 +38,18 @@ function ncw_keys($file) { $CONFIG = []; include $file; return array_keys($CONFI
 $out = [];
 foreach (array_slice($argv, 1) as $file) { $out[$file] = ncw_keys($file); }
 echo json_encode($out);`;
-  const r = spawnSync('php', ['-r', code, ...sources], { encoding: 'utf8' });
-  if (r.error) throw new InputError('php is required to check the keys of the partial configs, but it could not be run');
-  if (r.status !== 0) {
-    throw new InputError(`a partial config could not be evaluated by php: ${(r.stderr || r.stdout).trim()}`);
+  const php = spawnSync('php', ['-r', code, ...sources], { encoding: 'utf8' });
+  if (php.error) throw new InputError('php is required to check the keys of the partial configs, but it could not be run');
+  if (php.status !== 0) {
+    throw new InputError(`a partial config could not be evaluated by php: ${(php.stderr || php.stdout).trim()}`);
   }
-  return JSON.parse(r.stdout) as Record<string, string[]>;
+  return JSON.parse(php.stdout) as Record<string, string[]>;
 }
 
 /** The names of the environment variables a partial config reads through getenv. */
 export function configEnvReferences(source: string): string[] {
   const names = new Set<string>();
-  for (const m of source.matchAll(/\bgetenv\(\s*(['"])([^'"]+)\1\s*\)/g)) names.add(m[2] as string);
+  for (const reference of source.matchAll(/\bgetenv\(\s*(['"])([^'"]+)\1\s*\)/g)) names.add(reference[2] as string);
   return [...names];
 }
 
@@ -70,19 +70,19 @@ export function checkConfigs(flavor: ResolvedFlavor, flavorsRoot: string): Confi
   const sources: string[] = [];
   const warnings: string[] = [];
   for (const [file, source] of flavor.configs) {
-    const rel = relativePosix(flavorsRoot, source);
-    const owner = rel.startsWith('bases/') ? 'bases' : 'flavors';
+    const flavorsRelativePath = relativePosix(flavorsRoot, source);
+    const owner = flavorsRelativePath.startsWith('bases/') ? 'bases' : 'flavors';
     const match = CONFIG_NAME.exec(file);
-    if (!match) throw new InputError(`${rel}: a partial config must be named NN-<name>.config.php with a two digit number`);
+    if (!match) throw new InputError(`${flavorsRelativePath}: a partial config must be named NN-<name>.config.php with a two digit number`);
     const number = Number(match[1]);
     if (number <= RESERVED_UP_TO) {
-      throw new InputError(`${rel}: numbers 00 to 09 are reserved for generated files`);
+      throw new InputError(`${flavorsRelativePath}: numbers 00 to 09 are reserved for generated files`);
     }
     const [low, high] = RANGES[owner];
     if (number < low || number > high) {
-      warnings.push(`warning: config file ${rel} uses number ${match[1]}, bases use 10-49 and flavors use 50-89`);
+      warnings.push(`warning: config file ${flavorsRelativePath} uses number ${match[1]}, bases use 10-49 and flavors use 50-89`);
     }
-    byNumber.set(match[1] as string, [...(byNumber.get(match[1] as string) ?? []), rel]);
+    byNumber.set(match[1] as string, [...(byNumber.get(match[1] as string) ?? []), flavorsRelativePath]);
     sources.push(source);
   }
   for (const [number, files] of byNumber) {
@@ -92,12 +92,12 @@ export function checkConfigs(flavor: ResolvedFlavor, flavorsRoot: string): Confi
   const envReferences = new Map<string, string>();
   const keys = sources.length > 0 ? configKeys(sources) : {};
   for (const source of sources) {
-    const rel = relativePosix(flavorsRoot, source);
+    const flavorsRelativePath = relativePosix(flavorsRoot, source);
     for (const key of keys[source] ?? []) {
       const reason = forbiddenReason(key);
-      if (reason) throw new InputError(`${rel}: the key "${key}" is not allowed in a flavor config, it is ${reason}`);
+      if (reason) throw new InputError(`${flavorsRelativePath}: the key "${key}" is not allowed in a flavor config, it is ${reason}`);
     }
-    for (const name of configEnvReferences(readFileSync(source, 'utf8'))) if (!envReferences.has(name)) envReferences.set(name, rel);
+    for (const name of configEnvReferences(readFileSync(source, 'utf8'))) if (!envReferences.has(name)) envReferences.set(name, flavorsRelativePath);
   }
   return { envReferences, warnings };
 }
