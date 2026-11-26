@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { build, configAsNextcloudSeesIt, hasPhp, makeServerTree, readZip, tempDir, text } from './helpers.ts';
+import { build, configAsNextcloudSeesIt, hasPhp, makeFlavorsRoot, makeServerTree, readZip, tempDir, text } from './helpers.ts';
 
 // The fixture tree ships five apps. The example flavor (base `common` plus `flavor1`) declares:
 //   files: always, dav: always, activity: default, demo: always (from an app folder),
@@ -50,4 +50,20 @@ test('a generated partial config makes the active app folders app roots', { skip
       { path: '/srv/nextcloud/apps-flavor1', url: '/apps-flavor1', writable: false },
     ],
   });
+});
+
+test('an available app stays on disk and shipped but is neither default- nor always-enabled', () => {
+  const flavorsRoot = makeFlavorsRoot({
+    'flavors/lite/flavor.yaml': 'apps:\n  activity: available\n  dav: always\n',
+  });
+  const result = build({ flavorsRoot, flavor: 'lite', tree: makeServerTree(), out: tempDir('out') });
+  assert.equal(result.status, 0, result.stderr);
+  const zip = readZip(result.stdout.trim());
+
+  assert.deepEqual(JSON.parse(text(zip, 'core/shipped.json')), {
+    shippedApps: ['activity', 'dav', 'files', 'firstrunwizard', 'workflowengine'],
+    defaultEnabled: ['files', 'firstrunwizard'],
+    alwaysEnabled: ['dav', 'files', 'workflowengine'],
+  });
+  assert.ok(zip.has('apps/activity/appinfo/info.xml'), 'the app files stay on disk');
 });

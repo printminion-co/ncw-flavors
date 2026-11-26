@@ -21,6 +21,27 @@ function put(root: string, rel: string, content: string): void {
   writeFileSync(path, content);
 }
 
+/** Writes a flavors root (flavors/ and bases/) from a map of relative path to content. */
+export function makeFlavorsRoot(files: Record<string, string>): string {
+  const root = tempDir('flavors');
+  for (const [rel, content] of Object.entries(files)) put(root, rel, content);
+  return root;
+}
+
+/** Same shape as the example flavor committed in this repo, but owned by the tests. */
+export const FIXTURE_FLAVORS: Record<string, string> = {
+  'bases/common/flavor.yaml': 'apps:\n  files: always\n  dav: always\n  workflowengine: removed\n  firstrunwizard: removed\n',
+  'bases/common/config/10-core.config.php': "<?php\n$CONFIG = [\n  'appstoreenabled' => false,\n  'upgrade.disable-web' => true,\n];\n",
+  'flavors/flavor1/flavor.yaml': 'extends: [common]\napp_dirs: [apps-flavor1]\napps:\n  activity: default\n  demo: always\n',
+  'flavors/flavor1/config/50-flavor.config.php': "<?php\n$CONFIG = [\n  'default_phone_region' => 'DE',\n];\n",
+};
+
+let fixtureFlavorsRoot: string | undefined;
+export function defaultFlavorsRoot(): string {
+  fixtureFlavorsRoot ??= makeFlavorsRoot(FIXTURE_FLAVORS);
+  return fixtureFlavorsRoot;
+}
+
 const VERSION_PHP = `<?php
 $OC_Version = array(33,0,9,1);
 $OC_VersionString = '33.0.9';
@@ -46,7 +67,7 @@ function appInfo(id: string): string {
 `;
 }
 
-/** A small stand-in for a built Nextcloud 33.0.9 server tree, as the official archive lays it out. */
+/** A small stand-in for a built Nextcloud 33.0.9 server tree, as the official artifact lays it out. */
 export function makeServerTree(): string {
   const root = tempDir('tree');
   put(root, 'version.php', VERSION_PHP);
@@ -73,6 +94,8 @@ export function runCli(args: string[]): CliResult {
 }
 
 export interface BuildOptions {
+  /** Defaults to a fixture flavors root with `common` and `flavor1`. */
+  flavorsRoot?: string;
   tree: string;
   out: string;
   flavor?: string;
@@ -81,11 +104,11 @@ export interface BuildOptions {
   buildNumber?: string;
 }
 
-/** Runs `build` against the repo's real example flavors, with sensible defaults. */
+/** Runs `build` with sensible defaults; the flavors come from a fixture root unless one is given. */
 export function build(o: BuildOptions): CliResult {
   return runCli([
     'build',
-    '--flavors', REPO_ROOT,
+    '--flavors', o.flavorsRoot ?? defaultFlavorsRoot(),
     '--flavor', o.flavor ?? 'flavor1',
     '--tree', o.tree,
     '--line', o.line ?? '33',
@@ -95,21 +118,21 @@ export function build(o: BuildOptions): CliResult {
   ]);
 }
 
-/** Reads an archive into a map of entry path to bytes. */
+/** Reads an artifact into a map of entry path to bytes. */
 export function readZip(path: string): Map<string, Uint8Array> {
   return new Map(Object.entries(unzipSync(new Uint8Array(readFileSync(path)))));
 }
 
 export function text(zip: Map<string, Uint8Array>, entry: string): string {
   const bytes = zip.get(entry);
-  if (!bytes) throw new Error(`entry not in archive: ${entry}`);
+  if (!bytes) throw new Error(`entry not in artifact: ${entry}`);
   return strFromU8(bytes);
 }
 
 export const hasPhp: boolean = spawnSync('php', ['--version']).status === 0;
 
 /**
- * Evaluates the archive's version file in PHP, as Nextcloud would, and returns the version array and
+ * Evaluates the artifact's version file in PHP, as Nextcloud would, and returns the version array and
  * the channel as JSON. `withBuildNumber: false` removes the build number file first.
  */
 export function versionAsNextcloudSeesIt(zip: Map<string, Uint8Array>, withBuildNumber = true): string {
@@ -123,7 +146,7 @@ export function versionAsNextcloudSeesIt(zip: Map<string, Uint8Array>, withBuild
 }
 
 /**
- * Evaluates a partial config of the archive in PHP, as Nextcloud does (the server root is available as
+ * Evaluates a partial config of the artifact in PHP, as Nextcloud does (the server root is available as
  * `OC::$SERVERROOT`), and returns the resulting `$CONFIG` array as JSON.
  */
 export function configAsNextcloudSeesIt(zip: Map<string, Uint8Array>, entry: string, serverRoot = '/srv/nextcloud'): string {
@@ -137,11 +160,11 @@ export function configAsNextcloudSeesIt(zip: Map<string, Uint8Array>, entry: str
   return r.stdout;
 }
 
-/** The DOS date and time stored for every entry of an archive, read from its central directory. */
+/** The DOS date and time stored for every entry of an artifact, read from its central directory. */
 export function entryTimestamps(path: string): string[] {
   const buf = readFileSync(path);
   const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
-  if (eocd < 0) throw new Error('not a zip archive');
+  if (eocd < 0) throw new Error('not a zip artifact');
   const count = buf.readUInt16LE(eocd + 10);
   let offset = buf.readUInt32LE(eocd + 16);
   const stamps: string[] = [];

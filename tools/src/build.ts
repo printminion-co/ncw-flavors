@@ -1,9 +1,13 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { zipSync } from 'fflate';
+import { InputError } from './errors.ts';
 import { resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
-export interface BuildOptions {
+export type BuildKind = 'dev' | 'release';
+
+/** The options as the command line hands them over: not yet checked. */
+export interface RawBuildOptions {
   flavorsRoot: string;
   flavor: string;
   tree: string;
@@ -13,26 +17,53 @@ export interface BuildOptions {
   out: string;
 }
 
-/** The input is wrong in a way the caller can fix; the message says how. */
-export class InputError extends Error {}
+export interface BuildOptions {
+  flavorsRoot: string;
+  flavor: string;
+  tree: string;
+  /** The stable line, such as "33". */
+  line: string;
+  kind: BuildKind;
+  buildNumber: number;
+  out: string;
+}
 
-function validateOptions(o: BuildOptions): void {
+const FLAVOR_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
+
+function validateOptions(raw: RawBuildOptions): BuildOptions {
   const required: [string, string][] = [
-    ['--flavors', o.flavorsRoot], ['--flavor', o.flavor], ['--tree', o.tree], ['--line', o.line],
-    ['--kind', o.kind], ['--build-number', o.buildNumber], ['--out', o.out],
+    ['--flavors', raw.flavorsRoot], ['--flavor', raw.flavor], ['--tree', raw.tree], ['--line', raw.line],
+    ['--kind', raw.kind], ['--build-number', raw.buildNumber], ['--out', raw.out],
   ];
   for (const [name, value] of required) if (!value) throw new InputError(`missing option ${name}`);
 
-  if (o.kind !== 'dev' && o.kind !== 'release') throw new InputError(`unknown build kind "${o.kind}", expected dev or release`);
-  if (!/^[1-9][0-9]*$/.test(o.buildNumber)) {
-    throw new InputError(`the build number must be a positive integer, got "${o.buildNumber}"`);
+  if (!FLAVOR_NAME.test(raw.flavor)) {
+    throw new InputError(`flavor name "${raw.flavor}" must be lowercase letters, digits and single hyphens, starting with a letter`);
   }
-  if (!existsSync(o.tree) || !statSync(o.tree).isDirectory() || !existsSync(join(o.tree, 'version.php'))) {
-    throw new InputError(`the tree ${o.tree} does not exist or is not a Nextcloud tree (no version.php)`);
+  if (raw.kind !== 'dev' && raw.kind !== 'release') {
+    throw new InputError(`unknown build kind "${raw.kind}", expected dev or release`);
   }
-  if (!existsSync(join(o.flavorsRoot, 'flavors', o.flavor, 'flavor.yaml'))) {
-    throw new InputError(`flavor "${o.flavor}" not found in ${join(o.flavorsRoot, 'flavors')}`);
+  if (!/^[1-9][0-9]*$/.test(raw.buildNumber)) {
+    throw new InputError(`the build number must be a positive integer, got "${raw.buildNumber}"`);
   }
+  if (!/^[0-9]+$/.test(raw.line)) {
+    throw new InputError(`--line must be a stable line number such as 33, got "${raw.line}"`);
+  }
+  if (!existsSync(raw.tree) || !statSync(raw.tree).isDirectory() || !existsSync(join(raw.tree, 'version.php'))) {
+    throw new InputError(`the tree ${raw.tree} does not exist or is not a Nextcloud tree (no version.php)`);
+  }
+  if (!existsSync(join(raw.flavorsRoot, 'flavors', raw.flavor, 'flavor.yaml'))) {
+    throw new InputError(`flavor "${raw.flavor}" not found in ${join(raw.flavorsRoot, 'flavors')}`);
+  }
+  return {
+    flavorsRoot: raw.flavorsRoot,
+    flavor: raw.flavor,
+    tree: raw.tree,
+    line: raw.line,
+    kind: raw.kind,
+    buildNumber: Number(raw.buildNumber),
+    out: raw.out,
+  };
 }
 
 /** The files of a tree, by path relative to its root. */
@@ -40,9 +71,9 @@ type Tree = Map<string, Uint8Array>;
 
 function loadTree(root: string): Tree {
   const tree: Tree = new Map();
-  const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const path = join(dir, entry.name);
+  const walk = (folder: string): void => {
+    for (const entry of readdirSync(folder, { withFileTypes: true })) {
+      const path = join(folder, entry.name);
       if (entry.isDirectory()) walk(path);
       else tree.set(relative(root, path), new Uint8Array(readFileSync(path)));
     }
@@ -51,27 +82,29 @@ function loadTree(root: string): Tree {
   return tree;
 }
 
-function baseRelease(tree: Tree): string {
-  const version = readText(tree, 'version.php');
-  const match = /\$OC_VersionString\s*=\s*'([^']+)'/.exec(version);
-  if (!match?.[1]) throw new Error('the tree has no $OC_VersionString in its version file');
-  return match[1];
-}
-
-/** The official archive ships an install flag file and a web updater; neither belongs in a flavor. */
-function dropInstallFlagAndUpdater(tree: Tree): void {
-  tree.delete('config/CAN_INSTALL');
-  for (const path of [...tree.keys()]) if (path.startsWith('updater/')) tree.delete(path);
-}
-
 function readText(tree: Tree, path: string): string {
   const bytes = tree.get(path);
-  if (!bytes) throw new Error(`the tree has no ${path}`);
+  if (!bytes) throw new InputError(`the tree has no ${path}`);
   return new TextDecoder().decode(bytes);
 }
 
 function writeText(tree: Tree, path: string, content: string): void {
   tree.set(path, new TextEncoder().encode(content));
+}
+
+function deleteWhere(tree: Tree, matches: (path: string) => boolean): void {
+  for (const path of [...tree.keys()]) if (matches(path)) tree.delete(path);
+}
+
+function baseRelease(tree: Tree): string {
+  const match = /\$OC_VersionString\s*=\s*'([^']+)'/.exec(readText(tree, 'version.php'));
+  if (!match?.[1]) throw new InputError('the tree has no $OC_VersionString in its version file');
+  return match[1];
+}
+
+/** The official artifact ships an install flag file and a web updater; neither belongs in a flavor. */
+function dropInstallFlagAndUpdater(tree: Tree): void {
+  deleteWhere(tree, (path) => path === 'config/CAN_INSTALL' || path.startsWith('updater/'));
 }
 
 /** Appended to the version file: reads the build number file and adds it as a fifth version element. */
@@ -94,7 +127,7 @@ function rewriteVersionFile(tree: Tree): void {
   const version = readText(tree, 'version.php');
   const withChannel = version.replace(/(\$OC_Channel\s*=\s*)'[^']*';/, "$1'git';");
   if (withChannel === version && !/\$OC_Channel\s*=\s*'git';/.test(version)) {
-    throw new Error('the version file has no $OC_Channel to set');
+    throw new InputError('the version file has no $OC_Channel to set');
   }
   writeText(tree, 'version.php', withChannel + BUILD_NUMBER_SNIPPET);
 }
@@ -105,42 +138,47 @@ interface ShippedLists {
   alwaysEnabled: string[];
 }
 
+function readShippedLists(tree: Tree): ShippedLists {
+  const text = readText(tree, 'core/shipped.json');
+  try {
+    return JSON.parse(text) as ShippedLists;
+  } catch {
+    throw new InputError('core/shipped.json in the tree is not valid JSON');
+  }
+}
+
+const withoutApp = (list: string[], id: string): string[] => list.filter((x) => x !== id);
+const withApp = (list: string[], id: string): string[] => (list.includes(id) ? list : [...list, id]);
+
+/** Removes an app from the tree: the server's own copy and the copy in any active app folder. */
+function pruneApp(tree: Tree, flavor: ResolvedFlavor, id: string): void {
+  deleteWhere(tree, (path) => path.startsWith(`apps/${id}/`) || flavor.appFolders.some((folder) => path.startsWith(`${folder}/${id}/`)));
+}
+
 /**
- * Applies the app modes: generates the shipped-apps lists and prunes removed apps from the tree.
- * always -> always-enabled; default -> default-enabled; available -> in neither; removed -> in none of
- * the three lists and gone from the tree. Added apps are never put in the shipped list.
+ * Applies the app modes to the shipped-apps lists and the tree. always -> always-enabled; default ->
+ * default-enabled; available -> in neither; removed -> in none of the three lists and gone from the tree.
+ * Added apps are never put in the shipped list.
  */
 function applyAppModes(tree: Tree, flavor: ResolvedFlavor): void {
-  const lists = JSON.parse(readText(tree, 'core/shipped.json')) as ShippedLists;
-  const without = (list: string[], id: string): string[] => list.filter((x) => x !== id);
-  const added = (list: string[], id: string): string[] => (list.includes(id) ? list : [...list, id]);
-
+  const lists = readShippedLists(tree);
   for (const [id, mode] of flavor.apps) {
     if (mode === 'removed') {
-      lists.shippedApps = without(lists.shippedApps, id);
-      lists.defaultEnabled = without(lists.defaultEnabled, id);
-      lists.alwaysEnabled = without(lists.alwaysEnabled, id);
-      for (const path of [...tree.keys()]) {
-        if (path.startsWith(`apps/${id}/`) || flavor.appDirs.some((d) => path.startsWith(`${d}/${id}/`))) tree.delete(path);
-      }
-    } else if (mode === 'always') {
-      lists.defaultEnabled = without(lists.defaultEnabled, id);
-      lists.alwaysEnabled = added(lists.alwaysEnabled, id);
-    } else if (mode === 'default') {
-      lists.alwaysEnabled = without(lists.alwaysEnabled, id);
-      lists.defaultEnabled = added(lists.defaultEnabled, id);
+      lists.shippedApps = withoutApp(lists.shippedApps, id);
+      lists.defaultEnabled = withoutApp(lists.defaultEnabled, id);
+      lists.alwaysEnabled = withoutApp(lists.alwaysEnabled, id);
+      pruneApp(tree, flavor, id);
     } else {
-      lists.defaultEnabled = without(lists.defaultEnabled, id);
-      lists.alwaysEnabled = without(lists.alwaysEnabled, id);
+      lists.alwaysEnabled = mode === 'always' ? withApp(lists.alwaysEnabled, id) : withoutApp(lists.alwaysEnabled, id);
+      lists.defaultEnabled = mode === 'default' ? withApp(lists.defaultEnabled, id) : withoutApp(lists.defaultEnabled, id);
     }
   }
-  const sorted = (list: string[]): string[] => [...list].sort();
-  const out: ShippedLists = {
-    shippedApps: sorted(lists.shippedApps),
-    defaultEnabled: sorted(lists.defaultEnabled),
-    alwaysEnabled: sorted(lists.alwaysEnabled),
+  const generated: ShippedLists = {
+    shippedApps: [...lists.shippedApps].sort(),
+    defaultEnabled: [...lists.defaultEnabled].sort(),
+    alwaysEnabled: [...lists.alwaysEnabled].sort(),
   };
-  writeText(tree, 'core/shipped.json', JSON.stringify(out, null, 4) + '\n');
+  writeText(tree, 'core/shipped.json', JSON.stringify(generated, null, 4) + '\n');
 }
 
 /**
@@ -148,12 +186,12 @@ function applyAppModes(tree: Tree, flavor: ResolvedFlavor): void {
  * config that makes them app roots next to the server's own `apps`.
  */
 function activateAppFolders(tree: Tree, flavor: ResolvedFlavor): void {
-  for (const path of [...tree.keys()]) {
+  deleteWhere(tree, (path) => {
     const top = path.split('/')[0] ?? '';
-    if (top.startsWith('apps-') && !flavor.appDirs.includes(top)) tree.delete(path);
-  }
-  const roots = ['apps', ...flavor.appDirs]
-    .map((dir) => `    ['path' => OC::$SERVERROOT . '/${dir}', 'url' => '/${dir}', 'writable' => false],`)
+    return top.startsWith('apps-') && !flavor.appFolders.includes(top);
+  });
+  const roots = ['apps', ...flavor.appFolders]
+    .map((folder) => `    ['path' => OC::$SERVERROOT . '/${folder}', 'url' => '/${folder}', 'writable' => false],`)
     .join('\n');
   writeText(tree, 'config/00-apps-paths.config.php', `<?php\n$CONFIG = [\n  'apps_paths' => [\n${roots}\n  ],\n];\n`);
 }
@@ -163,34 +201,35 @@ function addPartialConfigs(tree: Tree, flavor: ResolvedFlavor): void {
   for (const [file, source] of flavor.configs) tree.set(`config/${file}`, new Uint8Array(readFileSync(source)));
 }
 
-/** A fixed timestamp (the earliest a zip can store), so the clock never leaks into an archive. */
+/** A fixed timestamp (the earliest a zip can store), so the clock never leaks into an artifact. */
 const FIXED_TIME = new Date(1980, 0, 1, 0, 0, 0);
 
 /** Zips the tree with sorted entries and fixed timestamps, so equal inputs give equal bytes. */
-function zip(tree: Tree): Uint8Array {
+function zipTree(tree: Tree): Uint8Array {
   const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};
   for (const path of [...tree.keys()].sort()) entries[path] = [tree.get(path) as Uint8Array, { mtime: FIXED_TIME }];
   return zipSync(entries);
 }
 
-/** Builds the archive of one flavor and returns its path. */
-export function buildArchive(o: BuildOptions): string {
-  validateOptions(o);
-  const flavor = resolveFlavor(o.flavorsRoot, o.flavor);
-  const tree = loadTree(o.tree);
+/** Builds the artifact of one flavor and returns its path. */
+export function buildArtifact(raw: RawBuildOptions): string {
+  const options = validateOptions(raw);
+  const flavor = resolveFlavor(options.flavorsRoot, options.flavor);
+  const tree = loadTree(options.tree);
   const release = baseRelease(tree);
-  if (!release.startsWith(`${o.line}.`)) {
-    throw new InputError(`line ${o.line} does not match the tree's base release ${release}`);
+  if (!release.startsWith(`${options.line}.`)) {
+    throw new InputError(`line ${options.line} does not match the tree's base release ${release}`);
   }
+
   applyAppModes(tree, flavor);
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
   dropInstallFlagAndUpdater(tree);
-  writeText(tree, '.buildnumber', `${o.buildNumber}\n`);
+  writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
   rewriteVersionFile(tree);
 
-  mkdirSync(o.out, { recursive: true });
-  const archive = join(o.out, `ncw-${o.flavor}-v${release}.${o.buildNumber}.zip`);
-  writeFileSync(archive, zip(tree));
-  return archive;
+  mkdirSync(options.out, { recursive: true });
+  const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);
+  writeFileSync(artifact, zipTree(tree));
+  return artifact;
 }
