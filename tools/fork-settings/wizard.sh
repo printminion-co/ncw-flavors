@@ -4,6 +4,8 @@
 # See README.md in this folder. Needs: bash, gh (logged in, admin on the repo to change
 # settings), jq. Reading is always safe; changing happens only with --apply, one
 # confirmed step at a time.
+# `set -e` is deliberately off: every check records a state (PASS, TODO, WAITING, UNKNOWN) and its error text
+# instead of stopping, so one unreadable setting never hides the others, and failed `gh` calls are expected input.
 set -uo pipefail
 
 REPO="printminion-co/mk-nc-server"
@@ -49,7 +51,8 @@ done
 
 [ -n "$MODE" ] || { usage >&2; exit 2; }
 if [ "$DRY" = 1 ] && [ "$MODE" != apply ]; then echo "--dry-run needs --apply" >&2; exit 2; fi
-case "$REPO" in */*) ;; *) echo "--repo must look like owner/name" >&2; exit 2 ;; esac
+[[ "$REPO" =~ ^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$ ]] || { echo "--repo must look like owner/name" >&2; exit 2; }
+if [ -n "$DEV_BRANCH" ] && ! [[ "$DEV_BRANCH" =~ ^ionos-dev-v[0-9]+$ ]]; then echo "--dev-branch must look like ionos-dev-v33" >&2; exit 2; fi
 if [ -n "$LIVE_LINE" ] && ! [[ "$LIVE_LINE" =~ ^[0-9]+$ ]]; then echo "--live-line must be a number" >&2; exit 2; fi
 command -v gh >/dev/null || { echo "gh is required" >&2; exit 2; }
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
@@ -66,14 +69,20 @@ STATE=""; EVID=(); FIX=()
 set_state() { STATE="$1"; shift; EVID=("$@"); }
 fix() { FIX+=("$1"); }
 
-# plan helpers: PLAN_CMD holds shell-quoted commands we built ourselves, PLAN_BODY the
-# JSON piped in for each (empty when none).
-PLAN_DESC=""; PLAN_CMD=(); PLAN_BODY=()
-plan_reset() { PLAN_DESC=""; PLAN_CMD=(); PLAN_BODY=(); }
+# plan helpers: PLAN_CMD holds each command as its arguments joined by the unit separator (so an argument can
+# hold any other character and is never parsed by a shell), PLAN_BODY the JSON piped in for each (empty when
+# none). PLAN_INTERACTIVE=1 lets the command talk to the person (a prompt) instead of discarding its output.
+US=$'\x1f'
+PLAN_DESC=""; PLAN_CMD=(); PLAN_BODY=(); PLAN_INTERACTIVE=0
+plan_reset() { PLAN_DESC=""; PLAN_CMD=(); PLAN_BODY=(); PLAN_INTERACTIVE=0; }
 plan_add() { # plan_add BODY args...
   local body="$1"; shift
   PLAN_BODY+=("$body")
-  PLAN_CMD+=("$(printf '%q ' "$@")")
+  local IFS="$US"
+  PLAN_CMD+=("$*")
+}
+plan_argv() { # plan_argv K -> ARGV holds the arguments of command K
+  IFS="$US" read -r -a ARGV <<<"${PLAN_CMD[$1]}"
 }
 
 R_JSON=""; RULESETS=""; RULESETS_ERR=""
@@ -105,20 +114,21 @@ pick_dev_branch() {
   load_repo
   local db; db=$(printf '%s' "$R_JSON" | jq -r '.default_branch // empty')
   if [[ "$db" =~ ^ionos-dev-v[0-9]+$ ]]; then echo "$db"; return; fi
-  get "repos/$REPO/branches?per_page=100" || return 0
+  get "repos/$REPO/branches" -X GET -f per_page=100 || return 0
   printf '%s' "$OUT" | jq -r '.[].name' | grep -E '^ionos-dev-v[0-9]+$' | sort -V | tail -1
 }
 
 # ---------------------------------------------------------------- settings
-IDS=(default_branch signed_commits pristine_mirrors token_permissions fork_pr_approval signing_keys upstream_workflows)
+IDS=(default_branch signed_commits pristine_mirrors token_permissions fork_pr_approval signing_keys upstream_workflows sync_token)
 
 title_default_branch()    { echo "Default branch is the live line's dev branch (ionos-dev-v<nn>)"; }
 title_signed_commits()    { echo "Signed commits required on ionos-dev-v* and rc/*"; }
 title_pristine_mirrors()  { echo "Mirrors master and stable* protected from force push and deletion"; }
-title_token_permissions() { echo "Workflow token: read and write permissions, may create pull requests"; }
+title_token_permissions() { echo "Workflow token: read and write permissions"; }
 title_fork_pr_approval()  { echo "Fork pull request workflows need approval from all outside collaborators"; }
 title_signing_keys()      { echo "Every developer has a signing key on GitHub"; }
 title_upstream_workflows(){ echo "Upstream's workflows stay disabled"; }
+title_sync_token()        { echo "Repository secret IONOS_SYNC_TOKEN exists (token with workflow scope)"; }
 
 chk_default_branch() {
   load_repo || { set_state UNKNOWN "cannot read the repository: $OUT"; return; }
@@ -199,18 +209,19 @@ chk_token_permissions() {
   local dwp car
   dwp=$(printf '%s' "$OUT" | jq -r '.default_workflow_permissions')
   car=$(printf '%s' "$OUT" | jq -r '.can_approve_pull_request_reviews')
-  if [ "$dwp" = write ] && [ "$car" = true ]; then
-    set_state PASS "default_workflow_permissions=$dwp, can_approve_pull_request_reviews=$car"
+  local info="can_approve_pull_request_reviews=$car (not needed while the sync token opens pull requests)"
+  if [ "$dwp" = write ]; then
+    set_state PASS "default_workflow_permissions=$dwp" "$info"
   else
-    set_state TODO "default_workflow_permissions=$dwp (want write), can_approve_pull_request_reviews=$car (want true)" \
-      "Write: the sync and snapshot workflows push branches, create issues and disable workflows. Create-PRs: the app-pin proposals open pull requests with GITHUB_TOKEN. Commit-lint declares its own minimal permissions."
+    set_state TODO "default_workflow_permissions=$dwp (want write)" "$info" \
+      "Write: the sync and snapshot workflows push branches, create issues and disable workflows. Commit-lint declares its own minimal permissions."
     fix "Settings > Actions > General: https://github.com/$REPO/settings/actions"
   fi
 }
 app_token_permissions() {
   plan_reset
-  PLAN_DESC="Set the workflow token default to read and write and allow Actions to create and approve pull requests. If an organization policy caps this, GitHub rejects it; change the org setting first."
-  plan_add "" gh api -X PUT "repos/$REPO/actions/permissions/workflow" -f default_workflow_permissions=write -F can_approve_pull_request_reviews=true
+  PLAN_DESC="Set the workflow token default to read and write. If an organization policy caps this, GitHub rejects it; change the org setting first."
+  plan_add "" gh api -X PUT "repos/$REPO/actions/permissions/workflow" -f default_workflow_permissions=write
 }
 
 chk_fork_pr_approval() {
@@ -231,7 +242,7 @@ app_fork_pr_approval() {
 chk_signing_keys() {
   local br; br=$(pick_dev_branch)
   if [ -z "$br" ]; then set_state UNKNOWN "no ionos-dev-v* branch found to inspect" "Keys per person cannot be read through the API."; return; fi
-  if ! get "repos/$REPO/commits?sha=$br&per_page=100"; then set_state UNKNOWN "cannot list commits of $br: $OUT"; return; fi
+  if ! get "repos/$REPO/commits" -X GET -f "sha=$br" -f per_page=100; then set_state UNKNOWN "cannot list commits of $br: $OUT"; return; fi
   local rows n bad
   rows=$(printf '%s' "$OUT" | jq -r '[.[]|select(.commit.message|startswith("IONOS("))][:10][]
     | [.sha[0:8], (.author.login // .commit.author.name), (.commit.verification.verified|tostring), .commit.verification.reason, (.commit.message|split("\n")[0])] | @tsv')
@@ -288,6 +299,24 @@ app_upstream_workflows() {
   done <<<"$UPSTREAM_ACTIVE"
 }
 
+chk_sync_token() {
+  if get "repos/$REPO/actions/secrets/IONOS_SYNC_TOKEN"; then
+    set_state PASS "secret IONOS_SYNC_TOKEN exists; its scope and expiry cannot be verified by the API"
+  elif [[ "$OUT" == *"HTTP 404"* ]]; then
+    set_state TODO "secret IONOS_SYNC_TOKEN does not exist" \
+      "The sync and snapshot workflows push branches that contain workflow files, which the default workflow token may not do, and they open the pull requests; they use this token instead."
+    fix "Settings > Secrets and variables > Actions: https://github.com/$REPO/settings/secrets/actions"
+  else
+    set_state UNKNOWN "cannot read the secret (needs admin): $OUT"
+  fi
+}
+app_sync_token() {
+  plan_reset
+  PLAN_DESC="Create the secret IONOS_SYNC_TOKEN. First, by hand, create a fine-grained personal access token at https://github.com/settings/personal-access-tokens/new limited to $REPO with these repository permissions, read and write, and no more: Contents, Workflows, Pull requests, Issues, Actions. Then the command below prompts you for the token value; this script never reads, shows or stores it."
+  plan_add "" gh secret set IONOS_SYNC_TOKEN --repo "$REPO"
+  PLAN_INTERACTIVE=1
+}
+
 # ---------------------------------------------------------------- output
 show_result() { # index id
   local i="$1" id="$2" e
@@ -324,15 +353,18 @@ show_plan() {
   local k
   printf '  What: %s\n' "$PLAN_DESC"
   for k in "${!PLAN_CMD[@]}"; do
-    if [ -n "${PLAN_BODY[$k]}" ]; then printf "  Command: echo '%s' | %s\n" "${PLAN_BODY[$k]}" "${PLAN_CMD[$k]}"
-    else printf '  Command: %s\n' "${PLAN_CMD[$k]}"; fi
+    plan_argv "$k"
+    if [ -n "${PLAN_BODY[$k]}" ]; then printf "  Command: echo '%s' | %s\n" "${PLAN_BODY[$k]}" "$(printf '%q ' "${ARGV[@]}")"
+    else printf '  Command: %s\n' "$(printf '%q ' "${ARGV[@]}")"; fi
   done
 }
 run_plan() {
   local k rc=0
   for k in "${!PLAN_CMD[@]}"; do
-    if [ -n "${PLAN_BODY[$k]}" ]; then printf '%s' "${PLAN_BODY[$k]}" | eval "${PLAN_CMD[$k]}" >/dev/null || rc=1
-    else eval "${PLAN_CMD[$k]}" >/dev/null || rc=1; fi
+    plan_argv "$k"
+    if [ "$PLAN_INTERACTIVE" = 1 ]; then "${ARGV[@]}" || rc=1
+    elif [ -n "${PLAN_BODY[$k]}" ]; then printf '%s' "${PLAN_BODY[$k]}" | "${ARGV[@]}" >/dev/null || rc=1
+    else "${ARGV[@]}" >/dev/null || rc=1; fi
   done
   return $rc
 }

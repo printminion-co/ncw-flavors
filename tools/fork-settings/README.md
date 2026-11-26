@@ -14,7 +14,8 @@ tools/fork-settings/wizard.sh --check --live-line 33   # at cutover, see below
 ```
 
 Other options: `--repo owner/name` (default `printminion-co/mk-nc-server`), `--dev-branch NAME` (branch whose
-commits the signing check lists). `--check` prints one state per setting with its evidence:
+commits the signing check lists). `--repo` must look like `owner/name` and `--dev-branch` like `ionos-dev-v33`, anything else
+is refused (exit 2). `--check` prints one state per setting with its evidence:
 
 | State | Meaning |
 |---|---|
@@ -44,11 +45,11 @@ dry run); it touches nothing on GitHub.
    something it spells out as a rule.
 4. **Workflow token.** `default_workflow_permissions=write`: the sync and snapshot workflows push branches,
    create issues and disable workflows (contents, issues, pull-requests, actions write); the commit-lint
-   workflow declares its own minimal permissions, so the wide default does not apply to it. And
-   `can_approve_pull_request_reviews=true` ("Allow GitHub Actions to create and approve pull requests"): the
-   scheduled job that proposes pull requests for app pin bumps opens them with the default `GITHUB_TOKEN`, which
-   GitHub forbids without this switch (ADR 0007: no cross-repo token). Verified and set through
-   `actions/permissions/workflow`. An organization policy can cap it; then change the org setting first.
+   workflow declares its own minimal permissions, so the wide default does not apply to it. Verified and set
+   through `actions/permissions/workflow`. An organization policy can cap it; then change the org setting first.
+   `can_approve_pull_request_reviews` ("Allow GitHub Actions to create and approve pull requests") is reported as
+   information only: it is not needed while the pin-proposal pull requests are opened with the sync token
+   (item 8) instead of the default `GITHUB_TOKEN`.
 5. **Fork pull request workflows need approval from all outside collaborators**
    (`approval_policy=all_external_contributors`, `actions/permissions/fork-pr-contributor-approval`).
 6. **Every developer has a signing key on GitHub.** Not verifiable through the API for people, so the check is
@@ -67,6 +68,18 @@ dry run); it touches nothing on GitHub.
    be `disabled_manually`. The check reads the Actions API; `--apply` disables the active ones
    (`gh api -X PUT repos/<repo>/actions/workflows/<id>/disable`). The upstream-tracking automation will keep them
    disabled later.
+8. **Repository secret `IONOS_SYNC_TOKEN` exists. Owner-supplied.** The sync and snapshot workflows push
+   branches that contain workflow files, which the default workflow token is not allowed to do (it lacks the
+   `workflow` scope), and they open the pin-proposal pull requests with it. So they use a token you create and
+   store as this secret. Checked with `gh api repos/<repo>/actions/secrets/IONOS_SYNC_TOKEN`: 200 is PASS (the
+   secret exists; its scope and expiry cannot be verified by the API), 404 is TODO, anything else (403, ...) is
+   UNKNOWN with the reason. `--apply` prints the steps and, after a y/n, runs
+   `gh secret set IONOS_SYNC_TOKEN --repo <repo>`:
+   1. Create a fine-grained personal access token at https://github.com/settings/personal-access-tokens/new,
+      limited to the fork only, with the repository permissions Contents, Workflows, Pull requests, Issues and
+      Actions, each read and write, and no more. Note its expiry date; the secret stops working then.
+   2. `gh secret set` prompts you for the value. The wizard never reads, echoes, logs or stores it; with
+      `--dry-run` it only prints the command.
 
 Not covered: branch deletion of merged branches, merge-method settings and other repository options the design
 does not mention.
