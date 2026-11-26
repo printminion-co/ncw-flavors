@@ -6,9 +6,9 @@ import { InputError, requireOption } from './errors.ts';
 import type { BuildKind } from './kind.ts';
 import { assertAppsCompatible } from './compat.ts';
 import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
-import { assembleAppConfig } from './appconfig.ts';
+import { assembleAppConfig, type AppConfig } from './appconfig.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
-import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type ShippedLists, type Tree } from './tree.ts';
+import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, renderJson } from './util.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
@@ -86,16 +86,16 @@ if (file_exists($buildNumberFile)) {
 }
 `;
 
-/** Sets the channel to git (no integrity enforcement) and appends the build number snippet. */
-function rewriteVersionFile(tree: Tree): void {
-  const version = readText(tree, 'version.php');
+/** The version file of the artifact: channel set to git (no integrity enforcement), build number snippet appended. */
+function renderVersionFile(files: Files): string {
+  const version = readText(files, 'version.php');
   const withChannel = version.replace(/(\$OC_Channel\s*=\s*)'[^']*';/, "$1'git';");
   if (withChannel === version && !/\$OC_Channel\s*=\s*'git';/.test(version)) {
     throw new InputError('the version file has no $OC_Channel to set');
   }
   // A tree that was processed before already has the snippet; appending it again would add the build number twice.
   const processed = withChannel.includes(BUILD_NUMBER_SNIPPET.trim());
-  writeText(tree, 'version.php', processed ? withChannel : withChannel + BUILD_NUMBER_SNIPPET);
+  return processed ? withChannel : withChannel + BUILD_NUMBER_SNIPPET;
 }
 
 const withoutApp = (list: string[], id: string): string[] => list.filter((x) => x !== id);
@@ -107,18 +107,17 @@ function pruneApp(tree: Tree, flavor: ResolvedFlavor, id: string): void {
 }
 
 /**
- * Applies the app modes to the shipped-apps lists and the tree. always -> always-enabled; default ->
- * default-enabled; available -> in neither; removed -> in none of the three lists and gone from the tree.
- * Added apps are never put in the shipped list.
+ * The shipped-apps lists the artifact gets from the app modes. always -> always-enabled; default ->
+ * default-enabled; available -> in neither; removed -> in none of the three lists. Added apps are never put in
+ * the shipped list. Pure: the tree's own lists are only read.
  */
-function applyAppModes(tree: Tree, flavor: ResolvedFlavor): void {
-  const lists = readShippedLists(tree);
+function generateShippedLists(tree: ShippedLists, flavor: ResolvedFlavor): ShippedLists {
+  const lists = { ...tree };
   for (const [id, mode] of flavor.apps) {
     if (mode === 'removed') {
       lists.shippedApps = withoutApp(lists.shippedApps, id);
       lists.defaultEnabled = withoutApp(lists.defaultEnabled, id);
       lists.alwaysEnabled = withoutApp(lists.alwaysEnabled, id);
-      pruneApp(tree, flavor, id);
     } else {
       lists.alwaysEnabled = mode === 'always' ? withApp(lists.alwaysEnabled, id) : withoutApp(lists.alwaysEnabled, id);
       lists.defaultEnabled = mode === 'default' ? withApp(lists.defaultEnabled, id) : withoutApp(lists.defaultEnabled, id);
@@ -130,7 +129,7 @@ function applyAppModes(tree: Tree, flavor: ResolvedFlavor): void {
     alwaysEnabled: [...lists.alwaysEnabled].sort(compareStrings),
   };
   assertRemovedAppsAreUnlisted(generated, flavor);
-  writeText(tree, 'core/shipped.json', renderJson(generated, 4));
+  return generated;
 }
 
 /**
@@ -154,7 +153,7 @@ function addPartialConfigs(tree: Tree, flavor: ResolvedFlavor): void {
 }
 
 /** The files the deployment reads: the app-config template, the settings the import cannot set, the removed apps. */
-function writeDeploymentFiles(tree: Tree, appConfig: ReturnType<typeof assembleAppConfig>, removed: string[]): void {
+function writeDeploymentFiles(tree: Tree, appConfig: AppConfig, removed: string[]): void {
   writeText(tree, 'app-config.json', renderJson({ apps: appConfig.apps }, 2));
   writeText(tree, 'app-config-special.json', renderJson(appConfig.special, 2));
   writeText(tree, 'removed-apps.json', renderJson(removed, 2));
@@ -179,35 +178,71 @@ export interface BuildResult {
   warnings: string[];
 }
 
-/** Builds the artifact of one flavor. */
-export function buildArtifact(raw: RawBuildOptions): BuildResult {
+/** Everything the assembly needs, computed by `validate` without touching anything. */
+interface ValidatedBuild {
+  options: BuildOptions;
+  flavor: ResolvedFlavor;
+  appConfig: AppConfig;
+  /** The server tree as read from disk. */
+  files: Tree;
+  release: string;
+  /** The shipped-apps lists the artifact gets. */
+  shippedLists: ShippedLists;
+  removed: string[];
+  versionFile: string;
+  warnings: string[];
+}
+
+/** The validation phase: every check of the build, in order, with no mutation of the tree and nothing written. */
+function validate(raw: RawBuildOptions): ValidatedBuild {
   const options = validateOptions(raw);
   const flavor = resolveFlavor(options.flavorsRoot, options.flavor);
   const configCheck = checkConfigs(flavor, options.flavorsRoot);
   const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
   const warnings = [...configCheck.warnings, ...checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]))];
-  const { files: tree, release } = loadServerTree(options.tree);
+  const { files, release } = loadServerTree(options.tree);
   if (!release.startsWith(`${options.line}.`)) {
     throw new InputError(`line ${options.line} does not match the tree's base release ${release}`);
   }
 
-  const apps = discoverApps(tree, flavor);
+  const apps = discoverApps(files, flavor);
   assertNoDuplicateApps(apps);
   warnings.push(...checkClassification(apps, flavor, options.kind));
-  assertAppsCompatible(tree, flavor, release, options.tree, 'source tree');
-  const removed = removedApps(flavor, readShippedLists(tree).shippedApps);
-  applyAppModes(tree, flavor);
-  writeDeploymentFiles(tree, appConfig, removed);
+  assertAppsCompatible(files, flavor, release, options.tree, 'source tree');
+  const treeLists = readShippedLists(files);
+  const removed = removedApps(flavor, treeLists.shippedApps);
+  const shippedLists = generateShippedLists(treeLists, flavor);
+  const versionFile = renderVersionFile(files);
+  return { options, flavor, appConfig, files, release, shippedLists, removed, versionFile, warnings };
+}
+
+/**
+ * The assembly phase: applies the validated build to the tree. The one check left is the compatibility check of
+ * the assembled tree, which needs the assembled tree.
+ */
+function assemble(validated: ValidatedBuild): Tree {
+  const { options, flavor, files: tree } = validated;
+  for (const [id, mode] of flavor.apps) if (mode === 'removed') pruneApp(tree, flavor, id);
+  writeText(tree, 'core/shipped.json', renderJson(validated.shippedLists, 4));
+  writeDeploymentFiles(tree, validated.appConfig, validated.removed);
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
   dropInstallFlagAndUpdater(tree);
   writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
-  rewriteVersionFile(tree);
-  assertAppsCompatible(tree, flavor, release, options.tree, 'assembled tree');
-  writeText(tree, 'version.json', renderMetadata(options.metadata, options.flavor, release, options.buildNumber, options.kind));
+  writeText(tree, 'version.php', validated.versionFile);
+  assertAppsCompatible(tree, flavor, validated.release, options.tree, 'assembled tree');
+  writeText(tree, 'version.json', renderMetadata(options.metadata, options.flavor, validated.release, options.buildNumber, options.kind));
+  return tree;
+}
+
+/** Builds the artifact of one flavor. */
+export function buildArtifact(raw: RawBuildOptions): BuildResult {
+  const validated = validate(raw);
+  const tree = assemble(validated);
+  const { options, release } = validated;
 
   mkdirSync(options.out, { recursive: true });
   const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);
   writeFileSync(artifact, zipTree(tree));
-  return { artifact, flavor, warnings };
+  return { artifact, flavor: validated.flavor, warnings: validated.warnings };
 }
