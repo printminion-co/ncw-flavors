@@ -4,9 +4,7 @@ import { InputError } from './errors.ts';
 import type { ResolvedFlavor } from './resolve.ts';
 import { compareStrings, relativePosix } from './util.ts';
 import { writeText, type Tree } from './tree.ts';
-
-/** The generated partial config that tells the server which theme classes to register. */
-export const THEMES_CONFIG = 'config/01-themes.config.php';
+import { CONFIG_KEYS, THEMES_CONFIG } from './generated.ts';
 
 /** Where theme classes go in the tree, and the namespace of the classes in it. */
 const CLASS_FOLDER = 'apps/theming/lib/Themes';
@@ -59,6 +57,6 @@ export function applyThemes(tree: Tree, flavor: ResolvedFlavor, flavorsRoot: str
     }
   }
   const list = classes.map((name) => `    ${phpString(name)},`).join('\n');
-  const enforced = flavor.enforceTheme === undefined ? '' : `  'enforce_theme' => ${phpString(flavor.enforceTheme)},\n`;
-  writeText(tree, THEMES_CONFIG, `<?php\n$CONFIG = [\n  'ncw.themes' => [\n${list}\n  ],\n${enforced}];\n`);
+  const enforced = flavor.enforceTheme === undefined ? '' : `  '${CONFIG_KEYS.enforceTheme}' => ${phpString(flavor.enforceTheme)},\n`;
+  writeText(tree, `config/${THEMES_CONFIG}`, `<?php\n$CONFIG = [\n  '${CONFIG_KEYS.themes}' => [\n${list}\n  ],\n${enforced}];\n`);
 }

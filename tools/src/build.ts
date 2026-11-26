@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps, removedApps } from './apps.ts';
 import { isDevFile } from './devfiles.ts';
+import { APPS_PATHS_CONFIG, CONFIG_KEYS } from './generated.ts';
 import { InputError, requireOption } from './errors.ts';
 import type { BuildKind } from './kind.ts';
 import { assertAppsCompatible } from './compat.ts';
@@ -146,7 +147,7 @@ function activateAppFolders(tree: Tree, flavor: ResolvedFlavor): void {
   const roots = ['apps', ...flavor.appFolders]
     .map((folder) => `    ['path' => OC::$SERVERROOT . '/${folder}', 'url' => '/${folder}', 'writable' => false],`)
     .join('\n');
-  writeText(tree, 'config/00-apps-paths.config.php', `<?php\n$CONFIG = [\n  'apps_paths' => [\n${roots}\n  ],\n];\n`);
+  writeText(tree, `config/${APPS_PATHS_CONFIG}`, `<?php\n$CONFIG = [\n  '${CONFIG_KEYS.appsPaths}' => [\n${roots}\n  ],\n];\n`);
 }
 
 /** Ships the flavor's partial configs next to upstream's sample config. */

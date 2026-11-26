@@ -8,13 +8,10 @@ import { InputError } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 import { loadTree, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, isPlainObject } from './util.ts';
-import { THEMES_CONFIG } from './themes.ts';
-
-/** Config files the tool generates; each must be present. Add a name here when a build step generates another one. */
-export const GENERATED_CONFIGS: readonly string[] = ['00-apps-paths.config.php'];
+import { generatedConfigs } from './generated.ts';
 
 /** Files of upstream's `config/` directory that stay in the artifact. */
-export const UPSTREAM_CONFIG_FILES: readonly string[] = ['config.sample.php', '.htaccess'];
+const UPSTREAM_CONFIG_FILES: readonly string[] = ['config.sample.php', '.htaccess'];
 
 /** Reads the artifact, a zip file or an unpacked directory, into a tree. */
 function loadArtifact(path: string): Tree {
@@ -34,8 +31,7 @@ const decode = (files: Files, path: string): string | undefined => {
 };
 
 function checkConfig(files: Files, flavor: ResolvedFlavor, violations: string[]): void {
-  const themesConfig = flavor.themes.length > 0 ? [THEMES_CONFIG.slice('config/'.length)] : [];
-  const expected = new Set([...flavor.configs.keys(), ...GENERATED_CONFIGS, ...themesConfig]);
+  const expected = new Set([...flavor.configs.keys(), ...generatedConfigs(flavor)]);
   const allowed = new Set([...expected, ...UPSTREAM_CONFIG_FILES]);
   const present = [...files.keys()].filter((path) => path.startsWith('config/'));
   for (const path of present) {
