@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { zipSync } from 'fflate';
+import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps } from './apps.ts';
 import { InputError, requireOption } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
@@ -171,6 +172,7 @@ function applyAppModes(tree: Tree, flavor: ResolvedFlavor): void {
     defaultEnabled: [...lists.defaultEnabled].sort(),
     alwaysEnabled: [...lists.alwaysEnabled].sort(),
   };
+  assertRemovedAppsAreUnlisted(generated, flavor);
   writeText(tree, 'core/shipped.json', JSON.stringify(generated, null, 4) + '\n');
 }
 
@@ -220,6 +222,10 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   if (!release.startsWith(`${options.line}.`)) {
     throw new InputError(`line ${options.line} does not match the tree's base release ${release}`);
   }
+
+  const apps = discoverApps(tree, flavor);
+  assertNoDuplicateApps(apps);
+  for (const warning of checkClassification(apps, flavor, options.kind)) process.stderr.write(`${warning}\n`);
 
   applyAppModes(tree, flavor);
   activateAppFolders(tree, flavor);

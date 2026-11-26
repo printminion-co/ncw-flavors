@@ -52,3 +52,10 @@ npm test
 
 The tests run the command line against a small stand-in for a built server tree and their own fixture flavors;
 one more test builds the example flavor committed in this branch. That command line is the one test seam. Tests that evaluate PHP are skipped when `php` is not installed.
+
+## App modes and classification
+
+Every app in the tree or in an active app folder needs a mode. An app without one is a warning on stderr in a `dev`
+build and a failure in a `release` build. The same app id in two active app folders, or in one and the server tree
+(`apps/<id>`), fails and names both locations (Nextcloud would load only one of them). Before the lists are written
+the build checks that no removed app is left in any of them.
