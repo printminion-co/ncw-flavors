@@ -33,7 +33,9 @@ The manifest has no version field and no per-line block. Each stable line has it
 ## Composition
 
 `extends` is an ordered list. Bases may extend bases; cycles are rejected. Resolution is depth first and the last
-entry wins, per app id and per config file name. The build prints the fully resolved flavor for review.
+entry wins, per app id, per config file name and per environment variable; themes and app folders are an ordered
+union. A base reached through more than one path is applied once, where it is first reached, so that applying it
+again later cannot undo an override made in between. The build prints the fully resolved flavor for review.
 
 ## The app list is a complete allowlist
 
@@ -45,9 +47,10 @@ flavor. An app without one is an error in release builds and a warning in dev bu
 
 The artifact is self-contained: the flavor's partial configs are real files in its `config/`. Nextcloud reads
 `config.php` if one exists, then every `*.config.php` in that directory in natural sort order, later wins. The
-numeric prefix makes the order visible: bases use 10–49, flavors 50–89. The build rejects two files with the same
-number in one resolved flavor. Deployment-generated partial files must not start with a digit, so they sort after
-the flavor's files and win on shared keys.
+numeric prefix makes the order visible: bases use 10–49, flavors 50–89. Numbers 00–09 are reserved for files the
+build tool generates, such as the apps-paths partial config, so they sort before the bases and flavors. The build
+rejects two files with the same number in one resolved flavor. Deployment-generated partial files must not start
+with a digit, so they sort after the flavor's files and win on shared keys.
 
 Flavors must not set deployment keys (database, object store, trusted domains, `instanceid`, `passwordsalt`,
 `secret`, mail transport, `datadirectory`) or keys Nextcloud writes itself (`version`, `installed`).
