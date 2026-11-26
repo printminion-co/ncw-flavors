@@ -14,6 +14,7 @@ export function formatResolvedFlavor(flavor: ResolvedFlavor, flavorsRoot: string
     apps: sortedObject(flavor.apps),
     app_folders: flavor.appFolders,
     themes: flavor.themes,
+    enforce_theme: flavor.enforceTheme,
     config_files: sortedObject([...flavor.configs].map(([file, source]): [string, string] => [file, relativeSource(source)])),
     env: [...flavor.env.values()].sort((a, b) => compareStrings(a.name, b.name)),
   });

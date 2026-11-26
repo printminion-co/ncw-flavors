@@ -199,6 +199,7 @@ export interface ResolvedReport {
   apps: Record<string, string>;
   app_folders: string[];
   themes: string[];
+  enforce_theme?: string;
   config_files: Record<string, string>;
   env: { name: string; required: boolean; default?: string }[];
 }

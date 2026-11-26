@@ -10,6 +10,7 @@ import { assembleAppConfig, type AppConfig } from './appconfig.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
 import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, renderJson } from './util.ts';
+import { applyThemes, checkThemes } from './themes.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 /** The options as the command line hands them over: not yet checked. */
@@ -197,6 +198,7 @@ interface ValidatedBuild {
 function validate(raw: RawBuildOptions): ValidatedBuild {
   const options = validateOptions(raw);
   const flavor = resolveFlavor(options.flavorsRoot, options.flavor);
+  checkThemes(flavor, options.flavorsRoot);
   const configCheck = checkConfigs(flavor, options.flavorsRoot);
   const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
   const warnings = [...configCheck.warnings, ...checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]))];
@@ -231,6 +233,7 @@ function assemble(validated: ValidatedBuild): Tree {
   writeDeploymentFiles(tree, validated.appConfig, validated.removed);
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
+  applyThemes(tree, flavor, options.flavorsRoot);
   dropInstallFlagAndUpdater(tree);
   writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
   writeText(tree, 'version.php', validated.versionFile);

@@ -6,7 +6,7 @@ branch of this repository (`docs/spec/`).
 ```
 flavors/<name>/   flavor.yaml, config/NN-<name>.config.php
 bases/<name>/     same structure, reused by flavors through `extends`
-themes/           theme packages (none yet)
+themes/<name>/   theme packages (lib/*.php, assets/**)
 tools/            the build tooling (TypeScript on Node 24)
 ```
 
@@ -143,3 +143,30 @@ git itself). Pretty JSON, two-space indent, sorted keys, final newline; only the
 `apps` and `cached_builds` are `{}` when their option is not given. Bad input is rejected before anything is
 written. A negative build number must be written `--build-number=-5` (the form `--build-number -5` is refused by the argument parser, also with exit 2).
 Processing a tree whose version file already has the build number snippet does not append it a second time.
+
+## Themes
+
+A theme is a package `themes/<name>/` in the flavors root:
+
+```
+themes/<name>/lib/*.php     the theme class files
+themes/<name>/assets/**     everything else: CSS, images, fonts, translation and template overrides
+```
+
+A flavor (or base) lists themes in its manifest (`themes: [acme]`, an ordered union over the bases) and may
+enforce one with `enforce_theme: acme` (the last declaration wins; it must be one of the flavor's themes, and a
+theme without a package folder is an input error). `ncw resolve` shows `themes` and `enforce_theme`.
+
+The build copies each `lib/<Class>.php` to `apps/theming/lib/Themes/<Class>.php` and each asset to
+`themes/<name>/<path under assets>` in the artifact. The class name is `OCA\Theming\Themes\<file name without
+.php>`, and the theme name must equal the id the class returns; the tool cannot check that. For a flavor with at
+least one theme the build generates `config/01-themes.config.php` (number 01 is in the range reserved for generated
+files, next to `00-apps-paths.config.php`):
+
+```php
+$CONFIG = ['ncw.themes' => ['OCA\\Theming\\Themes\\Acme'], 'enforce_theme' => 'acme'];
+```
+
+`enforce_theme` is left out when no theme is enforced. A flavor config may not set `ncw.themes` or `enforce_theme`.
+The server setting `ncw.themes` is read by a generic patch in the server fork (a separate ticket); this tool only
+generates the config.

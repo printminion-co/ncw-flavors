@@ -24,6 +24,8 @@ export interface ResolvedFlavor {
   appFolders: string[];
   /** Themes the flavor includes, in the order they were first declared. */
   themes: string[];
+  /** The theme the flavor enforces, if any; the last declaration wins. */
+  enforceTheme?: string;
   /** Environment variables by name; a later declaration replaces an earlier one. */
   env: Map<string, EnvDeclaration>;
   /** Partial config files by file name, mapped to their source path; a later declaration replaces an earlier one. */
@@ -38,6 +40,7 @@ interface Manifest {
   extends: string[];
   appFolders: string[];
   themes: string[];
+  enforceTheme?: string;
   env: EnvDeclaration[];
   apps: Record<string, Mode>;
   /** Partial config files by file name, mapped to their source path. */
@@ -95,7 +98,7 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
   } catch (error) {
     throw new InputError(`${path} is not valid YAML: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const fields = document as { extends?: unknown; app_dirs?: unknown; themes?: unknown; env?: unknown; apps?: unknown };
+  const fields = document as { extends?: unknown; app_dirs?: unknown; themes?: unknown; enforce_theme?: unknown; env?: unknown; apps?: unknown };
 
   const apps: Record<string, Mode> = {};
   for (const [id, mode] of Object.entries((fields.apps ?? {}) as Record<string, unknown>)) {
@@ -112,7 +115,11 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
       configs[file] = join(configFolder, file);
     }
   }
+  if (fields.enforce_theme !== undefined && fields.enforce_theme !== null && (typeof fields.enforce_theme !== 'string' || fields.enforce_theme === '')) {
+    throw new InputError(`${path}: enforce_theme must be a theme name`);
+  }
   return {
+    enforceTheme: typeof fields.enforce_theme === 'string' ? fields.enforce_theme : undefined,
     extends: parseNames(path, 'extends', fields.extends),
     appFolders: parseNames(path, 'app_dirs', fields.app_dirs),
     themes: parseNames(path, 'themes', fields.themes),
@@ -136,6 +143,7 @@ export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor
     for (const [id, mode] of Object.entries(manifest.apps)) resolved.apps.set(id, mode);
     for (const folder of manifest.appFolders) if (!resolved.appFolders.includes(folder)) resolved.appFolders.push(folder);
     for (const theme of manifest.themes) if (!resolved.themes.includes(theme)) resolved.themes.push(theme);
+    if (manifest.enforceTheme !== undefined) resolved.enforceTheme = manifest.enforceTheme;
     for (const declaration of manifest.env) resolved.env.set(declaration.name, declaration);
     for (const [file, source] of Object.entries(manifest.configs)) resolved.configs.set(file, source);
   };
