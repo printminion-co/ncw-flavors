@@ -4,6 +4,7 @@ import { zipSync } from 'fflate';
 import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps } from './apps.ts';
 import { InputError, requireOption } from './errors.ts';
 import { assertAppsCompatible } from './compat.ts';
+import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
@@ -17,6 +18,7 @@ export interface RawBuildOptions {
   kind: string;
   buildNumber: string;
   out: string;
+  metadata?: RawMetadataOptions;
 }
 
 export interface BuildOptions {
@@ -28,6 +30,7 @@ export interface BuildOptions {
   kind: BuildKind;
   buildNumber: number;
   out: string;
+  metadata: MetadataInputs;
 }
 
 function validateOptions(raw: RawBuildOptions): BuildOptions {
@@ -58,6 +61,7 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
     kind: raw.kind,
     buildNumber: Number(raw.buildNumber),
     out: raw.out,
+    metadata: validateMetadataInputs(raw.metadata ?? {}, raw.kind),
   };
 }
 
@@ -124,7 +128,9 @@ function rewriteVersionFile(tree: Tree): void {
   if (withChannel === version && !/\$OC_Channel\s*=\s*'git';/.test(version)) {
     throw new InputError('the version file has no $OC_Channel to set');
   }
-  writeText(tree, 'version.php', withChannel + BUILD_NUMBER_SNIPPET);
+  // A tree that was processed before already has the snippet; appending it again would add the build number twice.
+  const processed = withChannel.includes(BUILD_NUMBER_SNIPPET.trim());
+  writeText(tree, 'version.php', processed ? withChannel : withChannel + BUILD_NUMBER_SNIPPET);
 }
 
 interface ShippedLists {
@@ -235,6 +241,7 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
   rewriteVersionFile(tree);
   assertAppsCompatible(tree, flavor, release, options.tree, 'assembled tree');
+  writeText(tree, 'version.json', renderMetadata(options.metadata, options.flavor, release, options.kind));
 
   mkdirSync(options.out, { recursive: true });
   const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);

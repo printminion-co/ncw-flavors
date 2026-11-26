@@ -73,3 +73,22 @@ Every app in the tree or in an active app folder needs a mode. An app without on
 build and a failure in a `release` build. The same app id in two active app folders, or in one and the server tree
 (`apps/<id>`), fails and names both locations (Nextcloud would load only one of them). Before the lists are written
 the build checks that no removed app is left in any of them.
+
+## Build metadata
+
+Every artifact holds `version.json`, written by the build from inputs the pipeline supplies (the tool does not run
+git itself). Pretty JSON, two-space indent, sorted keys, final newline; only these fields exist:
+`flavor`, `base_release`, `kind` (`dev` or `release`), `snapshot_branch`, `release_number`, `scope`,
+`server_commit`, `flavors_commit`, `apps` (app id to `commit` and `describe`) and `cached_builds` (app id to
+`key` and `checksum`). The build number is not part of it (it is in `.buildnumber`).
+
+| Option | Meaning |
+| --- | --- |
+| `--snapshot-branch <name>`, `--release-number <n>`, `--scope <text>` | Required for kind `release`; optional for `dev`. A field whose option is not given is left out of the file. The release number is a positive integer, the scope is not empty. |
+| `--server-commit <sha>`, `--flavors-commit <sha>` | Optional hex commit shas (7 to 64 digits); left out when not given. |
+| `--app-pins <file.json>` | JSON object `{"<app id>": {"commit": "<sha>", "describe": "<git describe>"}}`. Both fields required, no others. |
+| `--cache-keys <file.json>` | JSON object `{"<app id>": {"key": "<cache key>", "checksum": "<checksum>"}}`. Both fields required, no others. |
+
+`apps` and `cached_builds` are `{}` when their option is not given. Bad input is rejected before anything is
+written. A negative build number must be written `--build-number=-5` (the form `--build-number -5` is refused by the argument parser, also with exit 2).
+Processing a tree whose version file already has the build number snippet does not append it a second time.

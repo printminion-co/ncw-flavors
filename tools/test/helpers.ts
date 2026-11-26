@@ -111,10 +111,16 @@ export interface BuildOptions {
   line?: string;
   kind?: string;
   buildNumber?: string;
+  /** Further command line arguments, appended as they are. */
+  extra?: string[];
 }
 
 /** Runs `build` with sensible defaults; the flavors come from a fixture root unless one is given. */
+/** What a release build needs besides the common options; tests that do not care about it get these. */
+const RELEASE_DEFAULTS = ['--snapshot-branch', 'rc/ncw-v33-1', '--release-number', '1', '--scope', 'fixture release'];
+
 export function build(o: BuildOptions): CliResult {
+  const extra = o.extra ?? (o.kind === 'release' ? RELEASE_DEFAULTS : []);
   return runCli([
     'build',
     '--flavors', o.flavorsRoot ?? defaultFlavorsRoot(),
@@ -124,6 +130,7 @@ export function build(o: BuildOptions): CliResult {
     '--kind', o.kind ?? 'dev',
     '--build-number', o.buildNumber ?? '812',
     '--out', o.out,
+    ...extra,
   ]);
 }
 

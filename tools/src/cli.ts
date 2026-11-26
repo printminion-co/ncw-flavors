@@ -9,6 +9,8 @@ import { assertValidFlavor, resolveFlavor } from './resolve.ts';
 
 const USAGE = `usage:
   ncw build   --flavors <root> --flavor <name> --tree <dir> --line <nn> --kind <dev|release> --build-number <n> --out <dir>
+              [--snapshot-branch <name> --release-number <n> --scope <text>] [--server-commit <sha>] [--flavors-commit <sha>]
+              [--app-pins <file.json>] [--cache-keys <file.json>]
   ncw resolve --flavors <root> --flavor <name>
   ncw check-compat --flavors <root> --flavor <name> --tree <dir>`;
 
@@ -23,6 +25,13 @@ function runBuild(args: string[]): number {
       kind: { type: 'string' },
       'build-number': { type: 'string' },
       out: { type: 'string' },
+      'snapshot-branch': { type: 'string' },
+      'release-number': { type: 'string' },
+      scope: { type: 'string' },
+      'server-commit': { type: 'string' },
+      'flavors-commit': { type: 'string' },
+      'app-pins': { type: 'string' },
+      'cache-keys': { type: 'string' },
     },
   });
   const { artifact, flavor } = buildArtifact({
@@ -33,6 +42,15 @@ function runBuild(args: string[]): number {
     kind: values.kind ?? '',
     buildNumber: values['build-number'] ?? '',
     out: values.out ?? '',
+    metadata: {
+      snapshotBranch: values['snapshot-branch'],
+      releaseNumber: values['release-number'],
+      scope: values.scope,
+      serverCommit: values['server-commit'],
+      flavorsCommit: values['flavors-commit'],
+      appPins: values['app-pins'],
+      cacheKeys: values['cache-keys'],
+    },
   });
   process.stderr.write(formatResolvedFlavor(flavor, values.flavors ?? ''));
   console.log(artifact);
