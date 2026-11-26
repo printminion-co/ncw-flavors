@@ -1,0 +1,22 @@
+{
+  "name": "ncw-flavors-tools",
+  "private": true,
+  "type": "module",
+  "description": "Build tooling for NC Flavors: resolve, validate, assemble and package a flavor.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
+    "ncw": "node src/cli.ts"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.11",
+    "typescript": "^7.0.2"
+  }
+}

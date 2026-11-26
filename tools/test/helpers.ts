@@ -1,0 +1,154 @@
+import { spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { strFromU8, unzipSync } from 'fflate';
+
+const here = dirname(fileURLToPath(import.meta.url));
+
+/** Root of the flavors repository branch (holds flavors/ and bases/). */
+export const REPO_ROOT = resolve(here, '../..');
+const CLI = resolve(here, '../src/cli.ts');
+
+export function tempDir(prefix: string): string {
+  return mkdtempSync(join(tmpdir(), `ncw-${prefix}-`));
+}
+
+function put(root: string, rel: string, content: string): void {
+  const path = join(root, rel);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, content);
+}
+
+const VERSION_PHP = `<?php
+$OC_Version = array(33,0,9,1);
+$OC_VersionString = '33.0.9';
+$OC_Edition = '';
+$OC_Channel = 'stable';
+$OC_VersionCanBeUpgradedFrom = array (
+  'nextcloud' => array ('32.0' => true, '33.0' => true),
+);
+$OC_Build = '2026-09-10T13:26:23+00:00 4d7d05e778398cdce1428b20d8687386edbc8268';
+$vendor = 'nextcloud';
+`;
+
+const SHIPPED = {
+  shippedApps: ['activity', 'dav', 'files', 'firstrunwizard', 'workflowengine'],
+  defaultEnabled: ['activity', 'dav', 'files', 'firstrunwizard'],
+  alwaysEnabled: ['dav', 'files', 'workflowengine'],
+};
+
+function appInfo(id: string): string {
+  return `<?xml version="1.0"?>
+<info><id>${id}</id><name>${id}</name><version>1.0.0</version>
+<dependencies><nextcloud min-version="33" max-version="33"/></dependencies></info>
+`;
+}
+
+/** A small stand-in for a built Nextcloud 33.0.9 server tree, as the official archive lays it out. */
+export function makeServerTree(): string {
+  const root = tempDir('tree');
+  put(root, 'version.php', VERSION_PHP);
+  put(root, 'core/shipped.json', JSON.stringify(SHIPPED, null, 4) + '\n');
+  for (const id of SHIPPED.shippedApps) put(root, `apps/${id}/appinfo/info.xml`, appInfo(id));
+  put(root, 'config/CAN_INSTALL', '');
+  put(root, 'config/config.sample.php', '<?php\n$CONFIG = [];\n');
+  put(root, 'updater/index.php', '<?php // web updater\n');
+  put(root, 'lib/base.php', '<?php // server code\n');
+  put(root, 'apps-flavor1/demo/appinfo/info.xml', appInfo('demo'));
+  put(root, 'apps-other/other/appinfo/info.xml', appInfo('other'));
+  return root;
+}
+
+export interface CliResult {
+  status: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+export function runCli(args: string[]): CliResult {
+  const r = spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
+  return { status: r.status, stdout: r.stdout, stderr: r.stderr };
+}
+
+export interface BuildOptions {
+  tree: string;
+  out: string;
+  flavor?: string;
+  line?: string;
+  kind?: string;
+  buildNumber?: string;
+}
+
+/** Runs `build` against the repo's real example flavors, with sensible defaults. */
+export function build(o: BuildOptions): CliResult {
+  return runCli([
+    'build',
+    '--flavors', REPO_ROOT,
+    '--flavor', o.flavor ?? 'flavor1',
+    '--tree', o.tree,
+    '--line', o.line ?? '33',
+    '--kind', o.kind ?? 'dev',
+    '--build-number', o.buildNumber ?? '812',
+    '--out', o.out,
+  ]);
+}
+
+/** Reads an archive into a map of entry path to bytes. */
+export function readZip(path: string): Map<string, Uint8Array> {
+  return new Map(Object.entries(unzipSync(new Uint8Array(readFileSync(path)))));
+}
+
+export function text(zip: Map<string, Uint8Array>, entry: string): string {
+  const bytes = zip.get(entry);
+  if (!bytes) throw new Error(`entry not in archive: ${entry}`);
+  return strFromU8(bytes);
+}
+
+export const hasPhp: boolean = spawnSync('php', ['--version']).status === 0;
+
+/**
+ * Evaluates the archive's version file in PHP, as Nextcloud would, and returns the version array and
+ * the channel as JSON. `withBuildNumber: false` removes the build number file first.
+ */
+export function versionAsNextcloudSeesIt(zip: Map<string, Uint8Array>, withBuildNumber = true): string {
+  const dir = tempDir('php');
+  writeFileSync(join(dir, 'version.php'), zip.get('version.php') ?? '');
+  if (withBuildNumber) writeFileSync(join(dir, '.buildnumber'), zip.get('.buildnumber') ?? '');
+  const r = spawnSync('php', ['-r', 'include $argv[1]; echo json_encode([$OC_Version, $OC_Channel]);', join(dir, 'version.php')], { encoding: 'utf8' });
+  rmSync(dir, { recursive: true, force: true });
+  if (r.status !== 0) throw new Error(`php failed: ${r.stderr}`);
+  return r.stdout;
+}
+
+/**
+ * Evaluates a partial config of the archive in PHP, as Nextcloud does (the server root is available as
+ * `OC::$SERVERROOT`), and returns the resulting `$CONFIG` array as JSON.
+ */
+export function configAsNextcloudSeesIt(zip: Map<string, Uint8Array>, entry: string, serverRoot = '/srv/nextcloud'): string {
+  const dir = tempDir('php');
+  const file = join(dir, 'partial.config.php');
+  writeFileSync(file, zip.get(entry) ?? '');
+  const code = 'class OC { public static $SERVERROOT = ' + JSON.stringify(serverRoot) + '; } include $argv[1]; echo json_encode($CONFIG);';
+  const r = spawnSync('php', ['-r', code, file], { encoding: 'utf8' });
+  rmSync(dir, { recursive: true, force: true });
+  if (r.status !== 0) throw new Error(`php failed: ${r.stderr}`);
+  return r.stdout;
+}
+
+/** The DOS date and time stored for every entry of an archive, read from its central directory. */
+export function entryTimestamps(path: string): string[] {
+  const buf = readFileSync(path);
+  const eocd = buf.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
+  if (eocd < 0) throw new Error('not a zip archive');
+  const count = buf.readUInt16LE(eocd + 10);
+  let offset = buf.readUInt32LE(eocd + 16);
+  const stamps: string[] = [];
+  for (let i = 0; i < count; i++) {
+    if (buf.readUInt32LE(offset) !== 0x02014b50) throw new Error('corrupt central directory');
+    stamps.push(`${buf.readUInt16LE(offset + 14)}:${buf.readUInt16LE(offset + 12)}`);
+    offset += 46 + buf.readUInt16LE(offset + 28) + buf.readUInt16LE(offset + 30) + buf.readUInt16LE(offset + 32);
+  }
+  return stamps;
+}

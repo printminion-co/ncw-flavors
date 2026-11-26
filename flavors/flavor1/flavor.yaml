@@ -1,0 +1,5 @@
+extends: [common]
+app_dirs: [apps-flavor1]
+apps:
+  activity: default
+  demo: always
