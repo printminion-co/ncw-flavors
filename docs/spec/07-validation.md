@@ -12,11 +12,15 @@ Nextcloud's own test suites are not run.
 
 ## Static checks
 
+`ncw validate` runs these checks on a zip or an unpacked tree; the compatibility check also runs on its own as
+`ncw check-compat`.
+
 - `config/` holds exactly the flavor's partials plus upstream's sample files, nothing else.
 - The app folders hold exactly the apps the flavor defines: none missing, none extra.
 - Every app has an explicit mode (complete allowlist).
 - No `updater/`, `config/CAN_INSTALL`, `.git` or dev files.
-- `version.json` and `.buildnumber` are present; config file numbers are unique.
+- `version.json` and `.buildnumber` are present, `version.json` names the flavor being validated, and config file
+  numbers are unique.
 - Every app is compatible with the server version (see [03-apps.md](03-apps.md)).
 
 ## Smoke tests

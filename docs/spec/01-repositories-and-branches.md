@@ -105,9 +105,11 @@ proposals, the manual snapshot workflow, the nightly dev build, the release buil
 - **Upstream's workflows:** the files are left untouched, because deleting them would conflict on every rebase.
   The scheduled sync job disables, through the Actions API, every workflow whose file name does not start with
   `ionos-`, so workflows that upstream adds later are switched off too.
-- **Tokens:** the default `GITHUB_TOKEN` pushes the mirrors, the candidates and the snapshot branches; no
-  cross-repo token is needed. Pushes made with that token do not trigger other workflows, so the snapshot workflow
-  starts the build explicitly.
+- **Tokens:** the default `GITHUB_TOKEN` may not create or update files under `.github/workflows`, and the
+  candidates (rebased copies of the patch series) contain workflow files. The sync, snapshot and pin-proposal
+  workflows therefore use a token with the `workflow` scope stored as the repository secret `IONOS_SYNC_TOKEN`
+  (ADR 0007); without it they can only do a dry run. Unlike the default token, it starts other workflows on what it
+  pushes or opens, so commit-lint runs on the pull requests the automation opens.
 - **Tooling:** the workflows check the fork out with submodules and run the build logic from `IONOS/tools`, in the
   version pinned by the checked-out snapshot, so an old snapshot rebuilds with its own tooling and its own
   workflows.
