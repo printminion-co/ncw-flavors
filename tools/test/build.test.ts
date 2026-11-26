@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { parse } from 'yaml';
@@ -86,4 +86,25 @@ test('build prints the resolved flavor to stderr for the build log and keeps std
     },
     env: [],
   });
+});
+
+test('a symbolic link that points at a file is shipped as that file', () => {
+  const tree = makeServerTree();
+  writeFileSync(join(tree, 'real.txt'), 'real\n');
+  symlinkSync('real.txt', join(tree, 'link.txt'));
+  const result = build({ tree, out: tempDir('out') });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(text(readZip(result.stdout.trim()), 'link.txt'), 'real\n');
+});
+
+test('a broken symbolic link or one that points at a folder is an input error that names it', () => {
+  for (const [name, target] of [['broken-link', 'nowhere'], ['folder-link', 'lib']] as const) {
+    const tree = makeServerTree();
+    symlinkSync(target, join(tree, name));
+    const result = build({ tree, out: tempDir('out') });
+
+    assert.equal(result.status, 2, `${name}: ${result.stderr}`);
+    assert.match(result.stderr, new RegExp(`symbolic link ${name}`));
+  }
 });

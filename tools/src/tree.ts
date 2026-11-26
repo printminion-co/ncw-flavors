@@ -47,14 +47,16 @@ export function assertServerTree(dir: string): void {
   }
 }
 
-/** Reads every file below a directory into a tree. */
+/** Reads every file below a directory into a tree. A symbolic link to a file is read as that file; one that is broken or points at a folder is an input error. */
 export function loadTree(root: string): Tree {
   const tree: Tree = new Map();
   const walk = (folder: string): void => {
     for (const entry of readdirSync(folder, { withFileTypes: true })) {
       const path = join(folder, entry.name);
       if (entry.isDirectory()) walk(path);
-      else tree.set(relativePosix(root, path), new Uint8Array(readFileSync(path)));
+      else if (entry.isSymbolicLink() && !statSync(path, { throwIfNoEntry: false })?.isFile()) {
+        throw new InputError(`the tree has a symbolic link ${relativePosix(root, path)} that is broken or does not point at a file`);
+      } else tree.set(relativePosix(root, path), new Uint8Array(readFileSync(path)));
     }
   };
   walk(root);
