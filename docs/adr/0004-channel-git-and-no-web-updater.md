@@ -1,0 +1,3 @@
+# Channel `git`, no web updater, no integrity enforcement
+
+Our patched trees can never carry a Nextcloud-trusted signature, and the official updater only accepts archives signed with a hardcoded Nextcloud certificate. We set the channel to `git` (which disables the integrity check), turn the web updater off (`upgrade.disable-web`) and the app store off (`appstoreenabled`), and upgrade by swapping the tree and running `occ upgrade`. Alternatives were `integrity.check.disabled` (keeps the `stable` channel behaviour) and signing with our own certificate authority (keeps the check meaningful but is untested and not an upstream flow). On 35, channel `git` also skips the check for a missing enabled shipped app, which is why the pre-disable step is required there.

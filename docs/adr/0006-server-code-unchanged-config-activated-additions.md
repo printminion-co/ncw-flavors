@@ -1,0 +1,3 @@
+# Server code is not changed; additions are activated by configuration
+
+Branding, mail templates, apps and themes are added as new classes and files and switched on through Nextcloud settings (`theme`, `enforce_theme`, `mail_template_class`, `apps_paths`). This keeps the patch series small and rebases conflict-free, because new files do not clash with upstream edits. The known exception is `ThemesService`, which builds its theme list from a fixed set of classes, so one generic named patch registers the extra theme classes listed in a system setting; there is no per-theme patch. Any other change to an existing file needs a reason recorded in the spec.

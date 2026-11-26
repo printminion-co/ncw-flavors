@@ -1,0 +1,3 @@
+# The build number is a 5th element of `$OC_Version`
+
+A snippet at the end of `version.php` reads `.buildnumber` and appends it to `$OC_Version`, so `status.php` shows `33.0.9.1.812` and every new build is a core upgrade. Upstream's own 4th segment is left untouched because it is small, not monotonic across patches, and replacing it would need an offset to stay above upstream's values. Nextcloud compares all segments, so a higher build runs `occ upgrade`; a lower or missing number is refused as a downgrade (the web UI errors and `status.php` returns an empty body), so the number must be strictly increasing and always present. A runtime read was chosen over rewriting `version.php` at build time; update checks, which cannot parse five segments, are not used.
