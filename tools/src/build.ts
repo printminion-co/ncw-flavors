@@ -86,10 +86,14 @@ function pruneApp(tree: Tree, flavor: ResolvedFlavor, id: string): void {
 /**
  * The shipped-apps lists the artifact gets from the app modes. always -> always-enabled; default ->
  * default-enabled; available -> in neither; removed -> in none of the three lists. Added apps are never put in
- * the shipped list. Pure: the tree's own lists are only read.
+ * the shipped list, which includes a vanilla app that the fork keeps outside `apps/` (a submodule of an app folder,
+ * although the tree's own list names it). Pure: the tree's own lists are only read.
  */
-function generateShippedLists(tree: ShippedLists, flavor: ResolvedFlavor): ShippedLists {
+function generateShippedLists(tree: ShippedLists, flavor: ResolvedFlavor, apps: Map<string, string[]>): ShippedLists {
   const lists = { ...tree };
+  for (const [id, folders] of apps) {
+    if (!folders.includes('apps')) lists.shippedApps = withoutApp(lists.shippedApps, id);
+  }
   for (const [id, mode] of flavor.apps) {
     if (mode === 'removed') {
       lists.shippedApps = withoutApp(lists.shippedApps, id);
@@ -189,7 +193,7 @@ function validate(raw: RawBuildOptions): ValidatedBuild {
     assertAppsCompatible(files, flavor, release, options.tree, 'source tree');
     const treeLists = readShippedLists(files);
     const removed = removedApps(flavor, treeLists.shippedApps);
-    const shippedLists = generateShippedLists(treeLists, flavor);
+    const shippedLists = generateShippedLists(treeLists, flavor, apps);
     const versionFile = renderVersionFile(files);
     return { options, flavor, appConfig, files, release, shippedLists, removed, versionFile, warnings };  } catch (error) {
     if (error instanceof InputError) error.warnings.push(...warnings);

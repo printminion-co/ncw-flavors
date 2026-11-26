@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { addApp, setShippedLists } from './app-helpers.ts';
-import { build, makeFlavorsRoot, makeServerTree, readZip, tempDir } from './helpers.ts';
+import { build, makeFlavorsRoot, makeServerTree, readZip, runCli, tempDir } from './helpers.ts';
 
 // The fixture tree ships dav, files, activity, firstrunwizard and workflowengine in `apps`, `demo` in the
 // active app folder `apps-flavor1` and `other` in the inactive `apps-other`.
@@ -179,4 +180,25 @@ test('a removed app that is already missing from the shipped lists of the tree i
   setShippedLists(tree, { shippedApps: ['dav', 'files'], defaultEnabled: [], alwaysEnabled: ['dav', 'files'] });
   const { lists } = listsOf('apps:\n  files: always\n  dav: always\n  activity: removed\n  firstrunwizard: removed\n  workflowengine: removed\n', tree);
   assert.deepEqual(lists, { shippedApps: ['dav', 'files'], defaultEnabled: [], alwaysEnabled: ['dav', 'files'] });
+});
+
+test('a vanilla app that lives in an active app folder (not in apps/) is dropped from the shipped list but keeps its mode', () => {
+  // as in the fork: the tree's own core/shipped.json lists activity, but the app is a submodule of apps-flavor1
+  const tree = makeServerTree();
+  rmSync(join(tree, 'apps/activity'), { recursive: true });
+  addApp(tree, 'apps-flavor1', 'activity');
+  const { lists, zip } = listsOf(`${ALL_CLASSIFIED}  demo: always\n`, tree, 'app_dirs: [apps-flavor1]\n');
+  assert.deepEqual(lists, {
+    shippedApps: ['dav', 'files'],
+    defaultEnabled: ['activity'],
+    alwaysEnabled: ['dav', 'demo', 'files'],
+  });
+  assert.ok(zip.has('apps-flavor1/activity/appinfo/info.xml'));
+  const dir = tempDir('unpacked');
+  for (const [path, bytes] of zip) {
+    mkdirSync(dirname(join(dir, path)), { recursive: true });
+    writeFileSync(join(dir, path), bytes);
+  }
+  const validated = runCli(['validate', '--flavors', makeFlavorsRoot({ 'flavors/f/flavor.yaml': `app_dirs: [apps-flavor1]\n${ALL_CLASSIFIED}  demo: always\n` }), '--flavor', 'f', '--artifact', dir]);
+  assert.equal(validated.status, 0, validated.stderr);
 });
