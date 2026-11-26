@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSy
 import { join, relative } from 'node:path';
 import { zipSync } from 'fflate';
 import { InputError } from './errors.ts';
-import { resolveFlavor, type ResolvedFlavor } from './resolve.ts';
+import { checkFlavorSelection, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
 
@@ -28,8 +28,6 @@ export interface BuildOptions {
   out: string;
 }
 
-const FLAVOR_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-
 function validateOptions(raw: RawBuildOptions): BuildOptions {
   const required: [string, string][] = [
     ['--flavors', raw.flavorsRoot], ['--flavor', raw.flavor], ['--tree', raw.tree], ['--line', raw.line],
@@ -37,9 +35,7 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
   ];
   for (const [name, value] of required) if (!value) throw new InputError(`missing option ${name}`);
 
-  if (!FLAVOR_NAME.test(raw.flavor)) {
-    throw new InputError(`flavor name "${raw.flavor}" must be lowercase letters, digits and single hyphens, starting with a letter`);
-  }
+  checkFlavorSelection(raw.flavorsRoot, raw.flavor);
   if (raw.kind !== 'dev' && raw.kind !== 'release') {
     throw new InputError(`unknown build kind "${raw.kind}", expected dev or release`);
   }
@@ -51,9 +47,6 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
   }
   if (!existsSync(raw.tree) || !statSync(raw.tree).isDirectory() || !existsSync(join(raw.tree, 'version.php'))) {
     throw new InputError(`the tree ${raw.tree} does not exist or is not a Nextcloud tree (no version.php)`);
-  }
-  if (!existsSync(join(raw.flavorsRoot, 'flavors', raw.flavor, 'flavor.yaml'))) {
-    throw new InputError(`flavor "${raw.flavor}" not found in ${join(raw.flavorsRoot, 'flavors')}`);
   }
   return {
     flavorsRoot: raw.flavorsRoot,

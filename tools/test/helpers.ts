@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { strFromU8, unzipSync } from 'fflate';
+import { parse } from 'yaml';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -174,4 +175,10 @@ export function entryTimestamps(path: string): string[] {
     offset += 46 + buf.readUInt16LE(offset + 28) + buf.readUInt16LE(offset + 30) + buf.readUInt16LE(offset + 32);
   }
   return stamps;
+}
+
+/** Runs `resolve` for a flavor of a flavors root and returns the raw result plus the printed flavor parsed as YAML. */
+export function resolveCli(flavorsRoot: string, flavor: string): CliResult & { printed: unknown } {
+  const result = runCli(['resolve', '--flavors', flavorsRoot, '--flavor', flavor]);
+  return { ...result, printed: result.status === 0 ? parse(result.stdout) : undefined };
 }
