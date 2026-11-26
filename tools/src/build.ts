@@ -200,20 +200,24 @@ function validate(raw: RawBuildOptions): ValidatedBuild {
   const configCheck = checkConfigs(flavor, options.flavorsRoot);
   const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
   const warnings = [...configCheck.warnings, ...checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]))];
-  const { files, release } = loadServerTree(options.tree);
-  if (!release.startsWith(`${options.line}.`)) {
-    throw new InputError(`line ${options.line} does not match the tree's base release ${release}`);
-  }
+  try {
+    const { files, release } = loadServerTree(options.tree);
+    if (!release.startsWith(`${options.line}.`)) {
+      throw new InputError(`line ${options.line} does not match the tree's base release ${release}`);
+    }
 
-  const apps = discoverApps(files, flavor);
-  assertNoDuplicateApps(apps);
-  warnings.push(...checkClassification(apps, flavor, options.kind));
-  assertAppsCompatible(files, flavor, release, options.tree, 'source tree');
-  const treeLists = readShippedLists(files);
-  const removed = removedApps(flavor, treeLists.shippedApps);
-  const shippedLists = generateShippedLists(treeLists, flavor);
-  const versionFile = renderVersionFile(files);
-  return { options, flavor, appConfig, files, release, shippedLists, removed, versionFile, warnings };
+    const apps = discoverApps(files, flavor);
+    assertNoDuplicateApps(apps);
+    warnings.push(...checkClassification(apps, flavor, options.kind));
+    assertAppsCompatible(files, flavor, release, options.tree, 'source tree');
+    const treeLists = readShippedLists(files);
+    const removed = removedApps(flavor, treeLists.shippedApps);
+    const shippedLists = generateShippedLists(treeLists, flavor);
+    const versionFile = renderVersionFile(files);
+    return { options, flavor, appConfig, files, release, shippedLists, removed, versionFile, warnings };  } catch (error) {
+    if (error instanceof InputError) error.warnings.push(...warnings);
+    throw error;
+  }
 }
 
 /**

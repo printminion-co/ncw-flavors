@@ -1,5 +1,8 @@
 /** The input is wrong in a way the caller can fix; the message says how. */
-export class InputError extends Error {}
+export class InputError extends Error {
+  /** Warnings found before this error, so the command line can still show them. */
+  warnings: string[] = [];
+}
 
 /** Returns the value of a required command line option, or fails with a message that names the option. */
 export function requireOption(name: string, value: string | undefined): string {

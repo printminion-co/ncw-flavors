@@ -1,4 +1,5 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { InputError } from './errors.ts';
 import type { ResolvedFlavor } from './resolve.ts';
@@ -79,7 +80,8 @@ export function checkConfigs(flavor: ResolvedFlavor, flavorsRoot: string): Confi
       throw new InputError(`${flavorsRelativePath}: numbers 00 to 09 are reserved for generated files`);
     }
     const [low, high] = RANGES[owner];
-    if (number < low || number > high) {
+    const replacesBaseFile = owner === 'flavors' && flavor.order.some((label) => label.startsWith('bases/') && existsSync(join(flavorsRoot, label, 'config', file)));
+    if ((number < low || number > high) && !replacesBaseFile) {
       warnings.push(`warning: config file ${flavorsRelativePath} uses number ${match[1]}, bases use 10-49 and flavors use 50-89`);
     }
     byNumber.set(match[1] as string, [...(byNumber.get(match[1] as string) ?? []), flavorsRelativePath]);

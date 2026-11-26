@@ -95,6 +95,7 @@ function isUsageError(error: unknown): boolean {
 try {
   process.exitCode = main(process.argv.slice(2));
 } catch (error) {
+  if (error instanceof InputError) for (const warning of error.warnings) console.error(warning);
   console.error(`ncw: ${error instanceof Error ? error.message : String(error)}`);
   process.exitCode = isUsageError(error) ? 2 : 1;
 }

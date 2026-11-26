@@ -68,7 +68,8 @@ The build checks every flavor before it writes anything; a violation is an input
   warning on stderr (`warning: config file X uses number NN, bases use 10-49 and flavors use 50-89`) and the build
   succeeds. Two different file names with the same number in one resolved flavor are an input error naming both
   files. A file with the same name in a nearer base or in the flavor replaces the earlier one, so a flavor can
-  override a base file by name (and, having the same name, the same number). Nextcloud loads the files in name
+  override a base file by name (and, having the same name, the same number); that replacement is not warned
+  about. Nextcloud loads the files in name
   order, so the number is the order.
 - Flavor and base configs may not set these keys, a fixed set: the deployment keys `dbtype`, `dbname`, `dbhost`,
   `dbport`, `dbuser`, `dbpassword`, `dbtableprefix`, `dbpersistent`, `dbdriveroptions`, `db.replica`,
