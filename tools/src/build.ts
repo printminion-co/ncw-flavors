@@ -257,7 +257,7 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
   rewriteVersionFile(tree);
   assertAppsCompatible(tree, flavor, release, options.tree, 'assembled tree');
-  writeText(tree, 'version.json', renderMetadata(options.metadata, options.flavor, release, options.kind));
+  writeText(tree, 'version.json', renderMetadata(options.metadata, options.flavor, release, options.buildNumber, options.kind));
 
   mkdirSync(options.out, { recursive: true });
   const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);

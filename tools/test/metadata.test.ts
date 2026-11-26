@@ -32,6 +32,7 @@ test('a release build writes every field of the build metadata', () => {
   assert.deepEqual(JSON.parse(meta), {
     flavor: 'flavor1',
     base_release: '33.0.9',
+    build_number: 812,
     kind: 'release',
     snapshot_branch: 'snapshot/33.0.9',
     release_number: 3,
@@ -64,6 +65,7 @@ test('the metadata file is pretty JSON with sorted keys and a final newline, equ
     }
   },
   "base_release": "33.0.9",
+  "build_number": 812,
   "cached_builds": {},
   "flavor": "flavor1",
   "kind": "release",
@@ -78,7 +80,15 @@ test('a dev build needs no snapshot branch, release number or scope and leaves t
   const { result, meta } = run([], 'dev');
 
   assert.equal(result.status, 0, result.stderr);
-  assert.deepEqual(JSON.parse(meta), { flavor: 'flavor1', base_release: '33.0.9', kind: 'dev', apps: {}, cached_builds: {} });
+  assert.deepEqual(JSON.parse(meta), { flavor: 'flavor1', base_release: '33.0.9', build_number: 812, kind: 'dev', apps: {}, cached_builds: {} });
+});
+
+test('the build number given with --build-number is recorded as an integer', () => {
+  const out = tempDir('out');
+  const result = build({ tree: makeServerTree(), out, buildNumber: '77' });
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(JSON.parse(text(readZip(result.stdout.trim()), 'version.json')).build_number, 77);
 });
 
 test('a dev build records the snapshot inputs when they are given', () => {

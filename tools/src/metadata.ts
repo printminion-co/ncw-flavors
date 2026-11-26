@@ -95,9 +95,9 @@ export function validateMetadataInputs(raw: RawMetadataOptions, kind: 'dev' | 'r
 }
 
 /** The content of `version.json`: sorted keys, two-space indent, final newline; absent inputs are left out. */
-export function renderMetadata(inputs: MetadataInputs, flavor: string, baseRelease: string, kind: 'dev' | 'release'): string {
+export function renderMetadata(inputs: MetadataInputs, flavor: string, baseRelease: string, buildNumber: number, kind: 'dev' | 'release'): string {
   const fields: Record<string, unknown> = {
-    flavor, base_release: baseRelease, kind,
+    flavor, base_release: baseRelease, build_number: buildNumber, kind,
     snapshot_branch: inputs.snapshotBranch, release_number: inputs.releaseNumber, scope: inputs.scope,
     server_commit: inputs.serverCommit, flavors_commit: inputs.flavorsCommit,
     apps: inputs.apps, cached_builds: inputs.cachedBuilds,

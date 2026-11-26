@@ -122,9 +122,9 @@ the build checks that no removed app is left in any of them.
 
 Every artifact holds `version.json`, written by the build from inputs the pipeline supplies (the tool does not run
 git itself). Pretty JSON, two-space indent, sorted keys, final newline; only these fields exist:
-`flavor`, `base_release`, `kind` (`dev` or `release`), `snapshot_branch`, `release_number`, `scope`,
+`flavor`, `base_release`, `build_number` (the integer given with `--build-number`), `kind` (`dev` or `release`), `snapshot_branch`, `release_number`, `scope`,
 `server_commit`, `flavors_commit`, `apps` (app id to `commit` and `describe`) and `cached_builds` (app id to
-`key` and `checksum`). The build number is not part of it (it is in `.buildnumber`).
+`key` and `checksum`).
 
 | Option | Meaning |
 | --- | --- |
