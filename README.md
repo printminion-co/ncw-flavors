@@ -118,6 +118,10 @@ npm test
 The tests run the command line against a small stand-in for a built server tree and their own fixture flavors;
 one more test builds the example flavor committed in this branch. That command line is the one test seam. Tests that evaluate PHP are skipped when `php` is not installed.
 
+## Fork settings
+
+`tools/fork-settings/wizard.sh --check` verifies, and `--apply` walks an owner through, the server fork's GitHub settings; see `tools/fork-settings/README.md`.
+
 ## App modes and classification
 
 Every app in the tree or in an active app folder needs a mode. An app without one is a warning on stderr in a `dev`
