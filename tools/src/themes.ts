@@ -29,6 +29,16 @@ export function checkThemes(flavor: ResolvedFlavor, flavorsRoot: string): void {
       throw new InputError(`theme "${theme}" has no package folder ${join(flavorsRoot, 'themes', theme)}`);
     }
   }
+  for (const theme of flavor.themes) {
+    const lib = join(flavorsRoot, 'themes', theme, 'lib');
+    const nested = !existsSync(lib) ? [] : readdirSync(lib, { withFileTypes: true, recursive: true })
+      .filter((entry) => entry.parentPath !== lib)
+      .map((entry) => `lib/${relativePosix(lib, join(entry.parentPath, entry.name))}`)
+      .sort(compareStrings);
+    if (nested.length > 0) {
+      throw new InputError(`theme "${theme}": only files directly in lib/ are classes, but found ${nested.join(', ')}`);
+    }
+  }
   if (flavor.enforceTheme !== undefined && !flavor.themes.includes(flavor.enforceTheme)) {
     throw new InputError(`enforce_theme "${flavor.enforceTheme}" is not one of the themes of flavor ${flavor.name} (${flavor.themes.join(', ') || 'none'})`);
   }
