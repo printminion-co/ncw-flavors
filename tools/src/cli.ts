@@ -14,6 +14,14 @@ const USAGE = `usage:
   ncw check-compat --flavors <root> --flavor <name> --tree <dir>
   ncw validate --flavors <root> --flavor <name> --artifact <zip or directory>`;
 
+/** The options every command that works on one flavor takes. */
+const FLAVOR_OPTIONS = { flavors: { type: 'string' }, flavor: { type: 'string' } } as const;
+
+/** The required `--flavors` and `--flavor` of a parsed command line. */
+function flavorOf(values: { flavors?: string; flavor?: string }): { flavorsRoot: string; flavor: string } {
+  return { flavorsRoot: requireOption('--flavors', values.flavors), flavor: requireOption('--flavor', values.flavor) };
+}
+
 function runBuild(args: string[]): number {
   const { values } = parseArgs({
     args,
@@ -59,9 +67,8 @@ function runBuild(args: string[]): number {
 }
 
 function runResolve(args: string[]): number {
-  const { values } = parseArgs({ args, options: { flavors: { type: 'string' }, flavor: { type: 'string' } } });
-  const flavorsRoot = requireOption('--flavors', values.flavors);
-  const flavor = requireOption('--flavor', values.flavor);
+  const { values } = parseArgs({ args, options: FLAVOR_OPTIONS });
+  const { flavorsRoot, flavor } = flavorOf(values);
 
   assertValidFlavor(flavorsRoot, flavor);
   process.stdout.write(formatResolvedFlavor(resolveFlavor(flavorsRoot, flavor), flavorsRoot));
@@ -69,9 +76,8 @@ function runResolve(args: string[]): number {
 }
 
 function runCheckCompat(args: string[]): number {
-  const { values } = parseArgs({ args, options: { flavors: { type: 'string' }, flavor: { type: 'string' }, tree: { type: 'string' } } });
-  const flavorsRoot = requireOption('--flavors', values.flavors);
-  const name = requireOption('--flavor', values.flavor);
+  const { values } = parseArgs({ args, options: { ...FLAVOR_OPTIONS, tree: { type: 'string' } } });
+  const { flavorsRoot, flavor: name } = flavorOf(values);
   const treeDir = requireOption('--tree', values.tree);
 
   checkCompat(flavorsRoot, name, treeDir);
@@ -79,9 +85,8 @@ function runCheckCompat(args: string[]): number {
 }
 
 function runValidate(args: string[]): number {
-  const { values } = parseArgs({ args, options: { flavors: { type: 'string' }, flavor: { type: 'string' }, artifact: { type: 'string' } } });
-  const flavorsRoot = requireOption('--flavors', values.flavors);
-  const name = requireOption('--flavor', values.flavor);
+  const { values } = parseArgs({ args, options: { ...FLAVOR_OPTIONS, artifact: { type: 'string' } } });
+  const { flavorsRoot, flavor: name } = flavorOf(values);
   const artifact = requireOption('--artifact', values.artifact);
 
   validateArtifact(flavorsRoot, name, artifact);

@@ -5,6 +5,7 @@ import { BUILD_NUMBER_SNIPPET } from './versionfile.ts';
 import { configNumber } from './configrules.ts';
 import { isDevFile } from './devfiles.ts';
 import { InputError } from './errors.ts';
+import type { BuildKind } from './kind.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 import { loadTree, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, isPlainObject } from './util.ts';
@@ -58,7 +59,7 @@ function checkFlavorName(versionJson: Record<string, unknown> | undefined, flavo
 }
 
 /** Apps of the artifact against the flavor; returns the warnings for apps without a mode in a dev artifact. */
-function checkApps(files: Files, flavor: ResolvedFlavor, kind: unknown, violations: string[]): { warnings: string[]; present: Map<string, string[]> } {
+function checkApps(files: Files, flavor: ResolvedFlavor, kind: BuildKind | undefined, violations: string[]): { warnings: string[]; present: Map<string, string[]> } {
   const present = discoverApps(files, flavor);
   const warnings: string[] = [];
   for (const id of [...present.keys()].sort(compareStrings)) {
@@ -154,7 +155,8 @@ export function validateArtifact(flavorsRoot: string, flavorName: string, artifa
   const versionJson = readVersionJson(files);
   checkFlavorName(versionJson, flavorName, violations);
   checkConfig(files, flavor, violations);
-  const { warnings, present } = checkApps(files, flavor, versionJson?.kind, violations);
+  const kind = versionJson?.kind === 'dev' || versionJson?.kind === 'release' ? versionJson.kind : undefined;
+  const { warnings, present } = checkApps(files, flavor, kind, violations);
   checkShippedLists(files, flavor, present, violations);
   checkForbidden(files, flavor, violations);
   checkVersionFiles(files, versionJson, violations);

@@ -4,7 +4,7 @@ import { InputError } from './errors.ts';
 import type { ResolvedFlavor } from './resolve.ts';
 import { compareStrings, relativePosix } from './util.ts';
 import { writeText, type Tree } from './tree.ts';
-import { CONFIG_KEYS, THEMES_CONFIG } from './generated.ts';
+import { CONFIG_KEYS, THEMES_CONFIG, phpString, renderPartialConfig } from './generated.ts';
 
 /** Where theme classes go in the tree, and the namespace of the classes in it. */
 const CLASS_FOLDER = 'apps/theming/lib/Themes';
@@ -17,8 +17,6 @@ function filesUnder(folder: string): string[] {
     .map((entry) => relativePosix(folder, join(entry.parentPath, entry.name)))
     .sort(compareStrings);
 }
-
-const phpString = (value: string): string => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 
 /** Every theme of the flavor needs a package folder `themes/<name>/`, and the enforced theme must be one of them. */
 export function checkThemes(flavor: ResolvedFlavor, flavorsRoot: string): void {
@@ -56,7 +54,7 @@ export function applyThemes(tree: Tree, flavor: ResolvedFlavor, flavorsRoot: str
       tree.set(`themes/${theme}/${file}`, new Uint8Array(readFileSync(join(folder, 'assets', file))));
     }
   }
-  const list = classes.map((name) => `    ${phpString(name)},`).join('\n');
-  const enforced = flavor.enforceTheme === undefined ? '' : `  '${CONFIG_KEYS.enforceTheme}' => ${phpString(flavor.enforceTheme)},\n`;
-  writeText(tree, `config/${THEMES_CONFIG}`, `<?php\n$CONFIG = [\n  '${CONFIG_KEYS.themes}' => [\n${list}\n  ],\n${enforced}];\n`);
+  const entries: [string, string | string[]][] = [[CONFIG_KEYS.themes, classes.map(phpString)]];
+  if (flavor.enforceTheme !== undefined) entries.push([CONFIG_KEYS.enforceTheme, flavor.enforceTheme]);
+  writeText(tree, `config/${THEMES_CONFIG}`, renderPartialConfig(entries));
 }

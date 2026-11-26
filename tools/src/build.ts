@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps, removedApps } from './apps.ts';
 import { isDevFile } from './devfiles.ts';
-import { APPS_PATHS_CONFIG, CONFIG_KEYS } from './generated.ts';
+import { APPS_PATHS_CONFIG, CONFIG_KEYS, phpString, renderPartialConfig } from './generated.ts';
 import { InputError, requireOption } from './errors.ts';
 import type { BuildKind } from './kind.ts';
 import { assertAppsCompatible } from './compat.ts';
@@ -119,9 +119,8 @@ function activateAppFolders(tree: Tree, flavor: ResolvedFlavor): void {
     return top.startsWith('apps-') && !flavor.appFolders.includes(top);
   });
   const roots = ['apps', ...flavor.appFolders]
-    .map((folder) => `    ['path' => OC::$SERVERROOT . '/${folder}', 'url' => '/${folder}', 'writable' => false],`)
-    .join('\n');
-  writeText(tree, `config/${APPS_PATHS_CONFIG}`, `<?php\n$CONFIG = [\n  '${CONFIG_KEYS.appsPaths}' => [\n${roots}\n  ],\n];\n`);
+    .map((folder) => `['path' => OC::$SERVERROOT . ${phpString(`/${folder}`)}, 'url' => ${phpString(`/${folder}`)}, 'writable' => false]`);
+  writeText(tree, `config/${APPS_PATHS_CONFIG}`, renderPartialConfig([[CONFIG_KEYS.appsPaths, roots]]));
 }
 
 /** Ships the flavor's partial configs next to upstream's sample config. */
