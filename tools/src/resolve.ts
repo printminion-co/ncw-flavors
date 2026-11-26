@@ -129,7 +129,7 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
     throw new InputError(`${path}: enforce_theme must be a theme name`);
   }
   return {
-    enforceTheme: typeof fields.enforce_theme === 'string' ? fields.enforce_theme : undefined,
+    enforceTheme: typeof fields.enforce_theme === 'string' ? parsePlainNames(path, 'enforce_theme', [fields.enforce_theme])[0] : undefined,
     extends: parsePlainNames(path, 'base name', parseNames(path, 'extends', fields.extends)),
     appFolders: parseNames(path, 'app_dirs', fields.app_dirs),
     themes: parsePlainNames(path, 'theme name', parseNames(path, 'themes', fields.themes)),

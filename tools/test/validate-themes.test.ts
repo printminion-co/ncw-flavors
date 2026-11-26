@@ -73,3 +73,14 @@ test('a base name that is a path is an input error', () => {
   assert.equal(result.status, 2, result.stderr);
   assert.match(result.stderr, /base name "\.\.\/x"/);
 });
+
+for (const bad of ['../x', 'a/b', 'UPPER']) {
+  test(`an enforce_theme that is not a plain lowercase name (${bad}) is an input error`, () => {
+    const root = makeFlavorsRoot({ ...THEME_FLAVORS, 'flavors/f/flavor.yaml': `themes: [acme]\nenforce_theme: "${bad}"\n` });
+    const result = build({ flavorsRoot: root, flavor: 'f', tree: makeServerTree(), out: tempDir('out') });
+
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, /enforce_theme "[^"]*" must be lowercase letters/);
+    assert.ok(result.stderr.includes(bad), result.stderr);
+  });
+}
