@@ -8,8 +8,10 @@ flavor of a release and they share one build number. A future container image wo
 already contains the build files below.
 
 Contents: the patched server tree, the flavor's apps with PHP dependencies and built JS/CSS, `core/shipped.json`
-generated for the flavor, the flavor's partial configs in `config/`, `app-config.json`, `removed-apps.json`,
-`version.json` and `.buildnumber`. Not in it: `updater/` (the official archive adds it from a separate repo; the
+generated for the flavor, the flavor's partial configs in `config/`, `app-config.json`, `app-config-special.json`
+(the sensitive, lazy and typed settings that the import cannot set), `removed-apps.json` (the vanilla apps the flavor
+drops that are in the server tree's shipped list; a dropped added or forked app is not listed), `version.json` and
+`.buildnumber`. Not in it: `updater/` (the official archive adds it from a separate repo; the
 server repo has none), `config/CAN_INSTALL` (the official archive ships it; the build deletes it), `.git`, dev files.
 
 ## Build number and version
@@ -64,6 +66,8 @@ GitHub Actions. The build logic comes from `IONOS/tools`, in the version pinned 
 | dev | tip of `ionos-dev-v<nn>` | manual or nightly | GitHub pre-release |
 | release | `rc/ncw-v<nn>-<n>` | when the snapshot workflow finishes | GitHub release |
 
+The build needs `php` on its path: it evaluates the flavors' partial configs to read their keys and reject forbidden ones.
+
 Per run:
 
 1. Resolve and validate every flavor: cycles, duplicate app ids, undeclared env vars, duplicate config numbers,
@@ -73,7 +77,7 @@ Per run:
    `removed` apps, strip dev files.
 4. Generate `core/shipped.json` and the `apps_paths` partial config, copy the flavor's partials, delete
    `config/CAN_INSTALL`.
-5. Write `app-config.json`, `removed-apps.json`, `version.json` and `.buildnumber`.
+5. Write `app-config.json`, `app-config-special.json`, `removed-apps.json`, `version.json` and `.buildnumber`.
 6. Run the validation layers (see [07-validation.md](07-validation.md)); a failure blocks publishing.
 7. Zip it, add a checksum and a build-provenance attestation, and attach it to the GitHub release of the snapshot
    tag in the fork. Rebuilds of the same snapshot attach new assets with new build numbers.
