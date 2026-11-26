@@ -1,7 +1,8 @@
 import { join } from 'node:path';
+import { appInfoPath, discoverApps } from './apps.ts';
 import { InputError } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
-import { assertServerTree, loadServerTree } from './tree.ts';
+import { assertServerTree, loadServerTree, readText } from './tree.ts';
 
 const TITLE = 'App version compatibility';
 
@@ -35,11 +36,6 @@ function problem(min: string | undefined, max: string | undefined, server: strin
   return null;
 }
 
-/** The app folders of a tree that hold apps: the server's own and the flavor's active ones. */
-function appRoots(flavor: ResolvedFlavor): string[] {
-  return ['apps', ...flavor.appFolders];
-}
-
 /**
  * Fails when an app that stays in the tree does not accept the server version. `files` maps tree paths to
  * content; `fileRoot` is the directory the annotations point into (the source checkout). Writes one GitHub
@@ -53,22 +49,21 @@ export function assertAppsCompatible(
   stage: string,
 ): void {
   const failures: string[] = [];
-  for (const [path, bytes] of files) {
-    const segments = path.split('/');
-    if (segments.length !== 4 || segments[2] !== 'appinfo' || segments[3] !== 'info.xml') continue;
-    const [folder, id] = segments as [string, string, string, string];
-    if (!appRoots(flavor).includes(folder) || flavor.apps.get(id) === 'removed') continue;
+  for (const [id, folders] of discoverApps(files, flavor)) {
+    if (flavor.apps.get(id) === 'removed') continue;
+    for (const folder of folders) {
+      const path = appInfoPath(folder, id);
+      const tag = /<nextcloud\b[^>]*>/.exec(readText(files, path))?.[0] ?? '';
+      const bound = (name: string): string | undefined => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
+      const min = bound('min-version');
+      const max = bound('max-version');
+      const why = problem(min, max, serverVersion);
+      if (why === null) continue;
 
-    const tag = /<nextcloud\b[^>]*>/.exec(new TextDecoder().decode(bytes))?.[0] ?? '';
-    const bound = (name: string): string | undefined => new RegExp(`\\b${name}="([^"]*)"`).exec(tag)?.[1];
-    const min = bound('min-version');
-    const max = bound('max-version');
-    const why = problem(min, max, serverVersion);
-    if (why === null) continue;
-
-    const message = `app "${id}": min-version ${min === undefined ? '(missing)' : `"${min}"`}, max-version ${max === undefined ? '(missing)' : `"${max}"`} do not accept server version ${serverVersion} (${why})`;
-    process.stderr.write(`::error file=${join(fileRoot, path)},title=${TITLE}::${message}\n`);
-    failures.push(message);
+      const message = `app "${id}": min-version ${min === undefined ? '(missing)' : `"${min}"`}, max-version ${max === undefined ? '(missing)' : `"${max}"`} do not accept server version ${serverVersion} (${why})`;
+      process.stderr.write(`::error file=${join(fileRoot, path)},title=${TITLE}::${message}\n`);
+      failures.push(message);
+    }
   }
   if (failures.length > 0) {
     throw new InputError(`app version compatibility check failed on the ${stage}:\n  ${failures.join('\n  ')}`);

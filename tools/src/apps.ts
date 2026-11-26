@@ -3,12 +3,20 @@ import type { ResolvedFlavor } from './resolve.ts';
 import type { Files, ShippedLists } from './tree.ts';
 
 
+/** The folders that hold apps: the server's own `apps` first, then the flavor's active app folders in their order. */
+export function appRoots(flavor: ResolvedFlavor): string[] {
+  return ['apps', ...flavor.appFolders];
+}
+
+/** Where the info file of an app is in the tree. */
+export const appInfoPath = (folder: string, id: string): string => `${folder}/${id}/appinfo/info.xml`;
+
 /**
  * The apps of the tree and of the flavor's active app folders: app id to the folders it is in. An app is a
  * folder with an `appinfo/info.xml` directly below `apps` or an active app folder.
  */
 export function discoverApps(tree: Files, flavor: ResolvedFlavor): Map<string, string[]> {
-  const folders = ['apps', ...flavor.appFolders];
+  const folders = appRoots(flavor);
   const found = new Map<string, string[]>();
   const ids = new Set<string>();
   for (const path of [...tree.keys()].sort()) {
