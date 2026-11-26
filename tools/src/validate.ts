@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { discoverApps } from './apps.ts';
 import { BUILD_NUMBER_SNIPPET } from './build.ts';
+import { isDevFile } from './devfiles.ts';
 import { InputError } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 import { loadTree, type Files, type ShippedLists, type Tree } from './tree.ts';
@@ -13,15 +14,6 @@ export const GENERATED_CONFIGS: readonly string[] = ['00-apps-paths.config.php']
 
 /** Files of upstream's `config/` directory that stay in the artifact. */
 export const UPSTREAM_CONFIG_FILES: readonly string[] = ['config.sample.php', '.htaccess'];
-
-/** Names that may not appear at any depth of the artifact (as a file or a folder). */
-export const FORBIDDEN_NAMES: readonly string[] = ['.git', '.github', '.gitignore', '.gitmodules', 'node_modules'];
-
-/** Folders that may not appear inside an app (below `apps/<id>` or an active app folder). */
-export const FORBIDDEN_APP_FOLDERS: readonly string[] = ['tests', 'test'];
-
-/** The install flag file and the web updater folder of the official artifact; the build leaves them out. */
-export const FORBIDDEN_PATHS: readonly string[] = ['config/CAN_INSTALL', 'updater'];
 
 /** Reads the artifact, a zip file or an unpacked directory, into a tree. */
 function loadArtifact(path: string): Tree {
@@ -47,7 +39,7 @@ function checkConfig(files: Files, flavor: ResolvedFlavor, violations: string[])
   const present = [...files.keys()].filter((path) => path.startsWith('config/'));
   for (const path of present) {
     const file = path.slice('config/'.length);
-    if (!allowed.has(file) && !FORBIDDEN_PATHS.includes(path)) violations.push(`unexpected file ${path}`);
+    if (!allowed.has(file) && !isDevFile(path, flavor.appFolders)) violations.push(`unexpected file ${path}`);
   }
   for (const file of [...expected].sort(compareStrings)) {
     if (!files.has(`config/${file}`)) violations.push(`missing config file config/${file}`);
@@ -104,15 +96,8 @@ function checkShippedLists(files: Files, flavor: ResolvedFlavor, present: Map<st
 }
 
 function checkForbidden(files: Files, flavor: ResolvedFlavor, violations: string[]): void {
-  const appFolders = ['apps', ...flavor.appFolders];
   for (const path of [...files.keys()].sort(compareStrings)) {
-    const parts = path.split('/');
-    const folders = parts.slice(0, -1);
-    const forbidden =
-      FORBIDDEN_PATHS.some((entry) => path === entry || path.startsWith(`${entry}/`)) ||
-      parts.some((part) => FORBIDDEN_NAMES.includes(part)) ||
-      (appFolders.includes(parts[0] ?? '') && folders.slice(2).some((part) => FORBIDDEN_APP_FOLDERS.includes(part)));
-    if (forbidden) violations.push(`forbidden entry ${path}`);
+    if (isDevFile(path, flavor.appFolders)) violations.push(`forbidden entry ${path}`);
   }
 }
 

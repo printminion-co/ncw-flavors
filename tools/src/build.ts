@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps, removedApps } from './apps.ts';
+import { isDevFile } from './devfiles.ts';
 import { InputError, requireOption } from './errors.ts';
 import type { BuildKind } from './kind.ts';
 import { assertAppsCompatible } from './compat.ts';
@@ -67,9 +68,9 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
   };
 }
 
-/** The official artifact ships an install flag file and a web updater; neither belongs in a flavor. */
-function dropInstallFlagAndUpdater(tree: Tree): void {
-  deleteWhere(tree, (path) => path === 'config/CAN_INSTALL' || path.startsWith('updater/'));
+/** Strips what never ships: the install flag file, the web updater, VCS and CI files, dependencies, tests of apps, the flavors submodule. */
+function stripDevFiles(tree: Tree, flavor: ResolvedFlavor): void {
+  deleteWhere(tree, (path) => isDevFile(path, flavor.appFolders));
 }
 
 /** Appended to the version file: reads the build number file and adds it as a fifth version element. */
@@ -234,7 +235,7 @@ function assemble(validated: ValidatedBuild): Tree {
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
   applyThemes(tree, flavor, options.flavorsRoot);
-  dropInstallFlagAndUpdater(tree);
+  stripDevFiles(tree, flavor);
   writeText(tree, '.buildnumber', `${options.buildNumber}\n`);
   writeText(tree, 'version.php', validated.versionFile);
   assertAppsCompatible(tree, flavor, validated.release, options.tree, 'assembled tree');

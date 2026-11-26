@@ -197,6 +197,7 @@ test('missing or broken core/shipped.json fails', () => {
 
 for (const [path, name] of [
   ['config/CAN_INSTALL', 'config/CAN_INSTALL'],
+  ['IONOS/README.md', 'IONOS/README.md'],
   ['updater/index.php', 'updater/'],
   ['.git/HEAD', '.git/HEAD'],
   ['.github/workflows/ci.yml', '.github/workflows/ci.yml'],
