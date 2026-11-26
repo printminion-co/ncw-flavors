@@ -175,7 +175,7 @@ export interface BuildResult {
   artifact: string;
   /** What the build resolved the flavor to, for the build log. */
   flavor: ResolvedFlavor;
-  /** Warnings for the build log. */
+  /** Every warning of the build, in the order the checks ran: config numbers, environment variables, unclassified apps. */
   warnings: string[];
 }
 
@@ -193,7 +193,7 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
 
   const apps = discoverApps(tree, flavor);
   assertNoDuplicateApps(apps);
-  for (const warning of checkClassification(apps, flavor, options.kind)) process.stderr.write(`${warning}\n`);
+  warnings.push(...checkClassification(apps, flavor, options.kind));
   assertAppsCompatible(tree, flavor, release, options.tree, 'source tree');
   const removed = removedApps(flavor, readShippedLists(tree).shippedApps);
   applyAppModes(tree, flavor);

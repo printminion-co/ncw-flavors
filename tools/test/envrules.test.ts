@@ -69,3 +69,17 @@ test('an environment variable declared in a base counts as declared for the flav
   );
   assert.equal(result.status, 0, result.stderr);
 });
+
+test('all warnings go to stderr in one stable order: config numbers, environment variables, unclassified apps', () => {
+  const result = buildF(
+    { 'flavors/f/config/95-late.config.php': cfg('') },
+    'env:\n  - name: UNUSED_VAR\n    required: false\n',
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const warnings = result.stderr.split('\n').filter((line) => line.startsWith('warning: '));
+  assert.deepEqual(warnings.slice(0, 3), [
+    'warning: config file flavors/f/config/95-late.config.php uses number 95, bases use 10-49 and flavors use 50-89',
+    'warning: environment variable UNUSED_VAR is declared but not used',
+    'warning: app activity has no mode',
+  ]);
+});
