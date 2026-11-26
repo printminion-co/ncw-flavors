@@ -22,7 +22,8 @@ Prints the path of `ncw-<flavor>-v<base release>.<build number>.zip` to stdout, 
 below) to stderr for the build log. The artifact holds the server tree with the
 flavor applied: shipped-apps lists generated from the app modes, removed apps pruned, only the active app folders,
 the flavor's partial configs, the build number file, and a version file that reports channel `git` and the build
-number as a fifth version element. The install flag file and the web updater are left out. The same inputs give
+number as a fifth version element. The dev files are stripped (see "Dev files" below), which includes the install
+flag file and the web updater. The same inputs give
 byte-identical artifacts. Besides the server tree the artifact root holds `app-config.json`,
 `app-config-special.json`, `removed-apps.json` and `version.json` (see below). The build needs `php` to read the
 keys of the partial configs.
@@ -118,22 +119,30 @@ Static checks of a produced artifact against the resolved flavor. Exit 0 when ev
 with every violation on stderr, each naming the file or app. Warnings (an app without a mode in a `dev` artifact)
 go to stderr and do not fail.
 
-- Config: `config/` holds exactly the flavor's partial configs, the generated files (`GENERATED_CONFIGS` in
-  `validate.ts`, today `00-apps-paths.config.php`; each must be present, and `01-themes.config.php` when the flavor has
-  themes) and upstream's `config.sample.php` and `.htaccess`. Anything else is an unexpected file; a missing expected file is an error.
+- Config: `config/` holds exactly the flavor's partial configs, the generated files (`00-apps-paths.config.php`,
+  and `01-themes.config.php` when the flavor has themes; each must be present) and upstream's `config.sample.php`
+  and `.htaccess`. Anything else is an unexpected file; a missing expected file is an error. Two different file
+  names with the same number are an error naming both files.
 - Apps: an app is a folder with `appinfo/info.xml` directly below `apps/` or an active app folder. A removed app
   that is present and a non-removed app of the flavor that is absent are errors. An app with no mode in the flavor
   is an error unless `version.json` says `kind` is `dev`, which makes it a warning.
 - Shipped lists (`core/shipped.json`): a removed app is in none of the three lists; an `always` app is in
   `alwaysEnabled`; a `default` app is in `defaultEnabled` and not in `alwaysEnabled`; an `available` app is in
   neither; an added app (one not in the server's own `apps/`) is never in `shippedApps`.
-- Forbidden entries (constants in `validate.ts`): `config/CAN_INSTALL`, `updater/`, and `.git`, `.github`,
-  `.gitignore`, `.gitmodules`, `node_modules` at any depth, plus `tests` and `test` folders inside an app.
+- Forbidden entries: the dev files (see "Dev files" below).
 - Version files: `version.json`, `.buildnumber` and `version.php` are present; `.buildnumber` is a positive
   integer equal to `build_number` in `version.json`; `version.php` sets the channel `git` and has the build number
-  snippet exactly once.
+  snippet exactly once. `flavor` in `version.json` equals `--flavor` (the error names both).
 
 The artifact is the zip `build` wrote or the same tree unpacked; both give the same result.
+
+### Dev files
+
+`build` strips the dev files from the tree and `validate` forbids them; one definition (`tools/src/devfiles.ts`)
+serves both. Dev files are: `.git`, `.github`, `.gitignore`, `.gitmodules` and `node_modules` at any depth (as a
+file or a folder); `tests` and `test` folders below an app (`apps/<id>/...` or `<active app folder>/<id>/...`,
+not elsewhere); the top-level folder `IONOS` (the flavors repository submodule of the server fork, which never
+ships); `config/CAN_INSTALL`; and `updater/`.
 
 ## Develop
 
@@ -183,6 +192,9 @@ A theme is a package `themes/<name>/` in the flavors root:
 themes/<name>/lib/*.php     the theme class files
 themes/<name>/assets/**     everything else: CSS, images, fonts, translation and template overrides
 ```
+
+Only files directly in `lib/` are classes; a nested file or folder below `lib/` is an input error naming it. A
+theme's translation and template overrides live under `themes/<name>/assets/` and are copied to `themes/<name>/` in the artifact.
 
 A flavor (or base) lists themes in its manifest (`themes: [acme]`, an ordered union over the bases) and may
 enforce one with `enforce_theme: acme` (the last declaration wins; it must be one of the flavor's themes, and a
