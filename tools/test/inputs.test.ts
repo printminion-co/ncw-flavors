@@ -51,6 +51,34 @@ const cases: Case[] = [
     mentions: ['demo', 'sometimes', 'always'],
     status: 2,
   },
+  {
+    name: 'extends given as a single name instead of a list',
+    change: { '--flavor': 'broken' },
+    flavors: { 'flavors/broken/flavor.yaml': 'extends: common\n' },
+    mentions: ['flavor.yaml', 'extends', 'list'],
+    status: 2,
+  },
+  {
+    name: 'app_dirs given as a single name instead of a list',
+    change: { '--flavor': 'broken' },
+    flavors: { 'flavors/broken/flavor.yaml': 'app_dirs: apps-x\n' },
+    mentions: ['flavor.yaml', 'app_dirs', 'list'],
+    status: 2,
+  },
+  {
+    name: 'themes given as a single name instead of a list',
+    change: { '--flavor': 'broken' },
+    flavors: { 'flavors/broken/flavor.yaml': 'themes: ionos\n' },
+    mentions: ['flavor.yaml', 'themes', 'list'],
+    status: 2,
+  },
+  {
+    name: 'a list entry that is not a name',
+    change: { '--flavor': 'broken' },
+    flavors: { 'flavors/broken/flavor.yaml': 'extends: [[a], b]\n' },
+    mentions: ['flavor.yaml', 'extends', 'list'],
+    status: 2,
+  },
 ];
 
 for (const c of cases) {

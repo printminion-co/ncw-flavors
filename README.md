@@ -18,7 +18,8 @@ node src/cli.ts build --flavors .. --flavor flavor1 --tree <built server tree> \
   --line 33 --kind dev --build-number 812 --out <dir>
 ```
 
-Prints the path of `ncw-<flavor>-v<base release>.<build number>.zip`. The artifact holds the server tree with the
+Prints the path of `ncw-<flavor>-v<base release>.<build number>.zip` to stdout, and the resolved flavor (see
+below) to stderr for the build log. The artifact holds the server tree with the
 flavor applied: shipped-apps lists generated from the app modes, removed apps pruned, only the active app folders,
 the flavor's partial configs, the build number file, and a version file that reports channel `git` and the build
 number as a fifth version element. The install flag file and the web updater are left out. The same inputs give

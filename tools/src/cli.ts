@@ -1,8 +1,8 @@
 import { parseArgs } from 'node:util';
 import { buildArtifact } from './build.ts';
-import { InputError } from './errors.ts';
+import { InputError, requireOption } from './errors.ts';
 import { formatResolvedFlavor } from './report.ts';
-import { checkFlavorSelection, resolveFlavor } from './resolve.ts';
+import { assertValidFlavor, resolveFlavor } from './resolve.ts';
 
 const USAGE = `usage:
   ncw build   --flavors <root> --flavor <name> --tree <dir> --line <nn> --kind <dev|release> --build-number <n> --out <dir>
@@ -21,7 +21,7 @@ function runBuild(args: string[]): number {
       out: { type: 'string' },
     },
   });
-  const artifact = buildArtifact({
+  const { artifact, flavor } = buildArtifact({
     flavorsRoot: values.flavors ?? '',
     flavor: values.flavor ?? '',
     tree: values.tree ?? '',
@@ -30,18 +30,17 @@ function runBuild(args: string[]): number {
     buildNumber: values['build-number'] ?? '',
     out: values.out ?? '',
   });
+  process.stderr.write(formatResolvedFlavor(flavor, values.flavors ?? ''));
   console.log(artifact);
   return 0;
 }
 
 function runResolve(args: string[]): number {
   const { values } = parseArgs({ args, options: { flavors: { type: 'string' }, flavor: { type: 'string' } } });
-  const flavorsRoot = values.flavors ?? '';
-  const flavor = values.flavor ?? '';
-  if (!flavorsRoot) throw new InputError('missing option --flavors');
-  if (!flavor) throw new InputError('missing option --flavor');
+  const flavorsRoot = requireOption('--flavors', values.flavors);
+  const flavor = requireOption('--flavor', values.flavor);
 
-  checkFlavorSelection(flavorsRoot, flavor);
+  assertValidFlavor(flavorsRoot, flavor);
   process.stdout.write(formatResolvedFlavor(resolveFlavor(flavorsRoot, flavor), flavorsRoot));
   return 0;
 }

@@ -177,8 +177,25 @@ export function entryTimestamps(path: string): string[] {
   return stamps;
 }
 
-/** Runs `resolve` for a flavor of a flavors root and returns the raw result plus the printed flavor parsed as YAML. */
-export function resolveCli(flavorsRoot: string, flavor: string): CliResult & { printed: unknown } {
-  const result = runCli(['resolve', '--flavors', flavorsRoot, '--flavor', flavor]);
-  return { ...result, printed: result.status === 0 ? parse(result.stdout) : undefined };
+/** What `resolve` prints for a flavor, parsed from its YAML. */
+export interface ResolvedReport {
+  flavor: string;
+  order: string[];
+  apps: Record<string, string>;
+  app_folders: string[];
+  themes: string[];
+  config_files: Record<string, string>;
+  env: { name: string; required: boolean; default?: string }[];
+}
+
+/** Runs `resolve` for a flavor of a flavors root and returns the raw result. */
+export function resolveCli(flavorsRoot: string, flavor: string): CliResult {
+  return runCli(['resolve', '--flavors', flavorsRoot, '--flavor', flavor]);
+}
+
+/** Runs `resolve`, which must succeed, and returns the printed flavor parsed as YAML. */
+export function resolveReport(flavorsRoot: string, flavor: string): ResolvedReport {
+  const result = resolveCli(flavorsRoot, flavor);
+  if (result.status !== 0) throw new Error(`resolve failed: ${result.stderr}`);
+  return parse(result.stdout) as ResolvedReport;
 }

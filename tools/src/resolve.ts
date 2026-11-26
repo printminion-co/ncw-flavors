@@ -29,6 +29,8 @@ export interface ResolvedFlavor {
   configs: Map<string, string>;
 }
 
+type ManifestKind = 'flavor' | 'base';
+
 interface Manifest {
   extends: string[];
   appFolders: string[];
@@ -39,16 +41,27 @@ interface Manifest {
   configs: Record<string, string>;
 }
 
+/** The folder of the flavors root that holds manifests of a kind. */
+const folderOf = (kind: ManifestKind): string => (kind === 'flavor' ? 'flavors' : 'bases');
+
 const FLAVOR_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
-/** Checks that a flavor name is well formed and that the flavor exists in the flavors root. */
-export function checkFlavorSelection(flavorsRoot: string, flavor: string): void {
+/** Fails unless the flavor name follows the naming rule and the flavor exists in the flavors root. */
+export function assertValidFlavor(flavorsRoot: string, flavor: string): void {
   if (!FLAVOR_NAME.test(flavor)) {
     throw new InputError(`flavor name "${flavor}" must be lowercase letters, digits and single hyphens, starting with a letter`);
   }
-  if (!existsSync(join(flavorsRoot, 'flavors', flavor, 'flavor.yaml'))) {
-    throw new InputError(`flavor "${flavor}" not found in ${join(flavorsRoot, 'flavors')}`);
+  if (!existsSync(join(flavorsRoot, folderOf('flavor'), flavor, 'flavor.yaml'))) {
+    throw new InputError(`flavor "${flavor}" not found in ${join(flavorsRoot, folderOf('flavor'))}`);
   }
+}
+
+function parseNames(path: string, field: string, value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || entry === '')) {
+    throw new InputError(`${path}: ${field} must be a list of names`);
+  }
+  return value as string[];
 }
 
 function parseEnv(path: string, value: unknown): EnvDeclaration[] {
@@ -65,8 +78,8 @@ function parseEnv(path: string, value: unknown): EnvDeclaration[] {
   });
 }
 
-function loadManifest(flavorsRoot: string, kind: 'flavor' | 'base', name: string, extendedBy?: string): Manifest {
-  const folder = join(flavorsRoot, kind === 'flavor' ? 'flavors' : 'bases');
+function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, extendedBy?: string): Manifest {
+  const folder = join(flavorsRoot, folderOf(kind));
   const path = join(folder, name, 'flavor.yaml');
   if (!existsSync(path)) {
     const by = extendedBy ? ` (extended by ${extendedBy})` : '';
@@ -97,9 +110,9 @@ function loadManifest(flavorsRoot: string, kind: 'flavor' | 'base', name: string
     }
   }
   return {
-    extends: (fields.extends ?? []) as string[],
-    appFolders: (fields.app_dirs ?? []) as string[],
-    themes: (fields.themes ?? []) as string[],
+    extends: parseNames(path, 'extends', fields.extends),
+    appFolders: parseNames(path, 'app_dirs', fields.app_dirs),
+    themes: parseNames(path, 'themes', fields.themes),
     env: parseEnv(path, fields.env),
     apps,
     configs,
@@ -116,7 +129,7 @@ export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor
     name, order: [], apps: new Map(), appFolders: [], themes: [], env: new Map(), configs: new Map(),
   };
 
-  const apply = (manifest: Manifest): void => {
+  const mergeIntoResolved = (manifest: Manifest): void => {
     for (const [id, mode] of Object.entries(manifest.apps)) resolved.apps.set(id, mode);
     for (const folder of manifest.appFolders) if (!resolved.appFolders.includes(folder)) resolved.appFolders.push(folder);
     for (const theme of manifest.themes) if (!resolved.themes.includes(theme)) resolved.themes.push(theme);
@@ -124,17 +137,18 @@ export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor
     for (const [file, source] of Object.entries(manifest.configs)) resolved.configs.set(file, source);
   };
 
-  const visit = (kind: 'flavor' | 'base', manifestName: string, chain: string[]): void => {
-    const id = `${kind === 'flavor' ? 'flavors' : 'bases'}/${manifestName}`;
-    if (chain.includes(id)) throw new InputError(`cycle in extends: ${[...chain, id].join(' -> ')}`);
-    if (resolved.order.includes(id)) return;
+  /** `chain` holds the labels of the manifests being resolved above this one, to detect cycles. */
+  const resolveManifest = (kind: ManifestKind, manifestName: string, chain: string[]): void => {
+    const label = `${folderOf(kind)}/${manifestName}`;
+    if (chain.includes(label)) throw new InputError(`cycle in extends: ${[...chain, label].join(' -> ')}`);
+    if (resolved.order.includes(label)) return;
 
     const manifest = loadManifest(flavorsRoot, kind, manifestName, chain[chain.length - 1]);
-    for (const base of manifest.extends) visit('base', base, [...chain, id]);
-    apply(manifest);
-    resolved.order.push(id);
+    for (const base of manifest.extends) resolveManifest('base', base, [...chain, label]);
+    mergeIntoResolved(manifest);
+    resolved.order.push(label);
   };
 
-  visit('flavor', name, []);
+  resolveManifest('flavor', name, []);
   return resolved;
 }

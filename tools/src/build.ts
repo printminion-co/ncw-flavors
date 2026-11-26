@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { zipSync } from 'fflate';
-import { InputError } from './errors.ts';
-import { checkFlavorSelection, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
+import { InputError, requireOption } from './errors.ts';
+import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
 
@@ -33,9 +33,9 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
     ['--flavors', raw.flavorsRoot], ['--flavor', raw.flavor], ['--tree', raw.tree], ['--line', raw.line],
     ['--kind', raw.kind], ['--build-number', raw.buildNumber], ['--out', raw.out],
   ];
-  for (const [name, value] of required) if (!value) throw new InputError(`missing option ${name}`);
+  for (const [name, value] of required) requireOption(name, value);
 
-  checkFlavorSelection(raw.flavorsRoot, raw.flavor);
+  assertValidFlavor(raw.flavorsRoot, raw.flavor);
   if (raw.kind !== 'dev' && raw.kind !== 'release') {
     throw new InputError(`unknown build kind "${raw.kind}", expected dev or release`);
   }
@@ -204,8 +204,15 @@ function zipTree(tree: Tree): Uint8Array {
   return zipSync(entries);
 }
 
-/** Builds the artifact of one flavor and returns its path. */
-export function buildArtifact(raw: RawBuildOptions): string {
+export interface BuildResult {
+  /** The path of the artifact that was written. */
+  artifact: string;
+  /** What the build resolved the flavor to, for the build log. */
+  flavor: ResolvedFlavor;
+}
+
+/** Builds the artifact of one flavor. */
+export function buildArtifact(raw: RawBuildOptions): BuildResult {
   const options = validateOptions(raw);
   const flavor = resolveFlavor(options.flavorsRoot, options.flavor);
   const tree = loadTree(options.tree);
@@ -224,5 +231,5 @@ export function buildArtifact(raw: RawBuildOptions): string {
   mkdirSync(options.out, { recursive: true });
   const artifact = join(options.out, `ncw-${options.flavor}-v${release}.${options.buildNumber}.zip`);
   writeFileSync(artifact, zipTree(tree));
-  return artifact;
+  return { artifact, flavor };
 }

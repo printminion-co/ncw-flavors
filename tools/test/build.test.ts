@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { parse } from 'yaml';
 import { build, configAsNextcloudSeesIt, entryTimestamps, hasPhp, makeServerTree, readZip, tempDir, text, versionAsNextcloudSeesIt } from './helpers.ts';
 
 test('build writes one artifact named after the flavor, the base release and the build number', () => {
@@ -66,4 +67,23 @@ test('two builds with the same inputs give byte-identical artifacts', () => {
   assert.ok(readFileSync(first.stdout.trim()).equals(readFileSync(second.stdout.trim())), 'the artifacts differ');
   // 33 is the DOS date 1980-01-01 and 0 is midnight: a fixed timestamp, so the clock cannot leak into the artifact
   assert.deepEqual([...new Set(entryTimestamps(first.stdout.trim()))], ['33:0']);
+});
+
+test('build prints the resolved flavor to stderr for the build log and keeps stdout for the artifact path', () => {
+  const result = build({ tree: makeServerTree(), out: tempDir('out') });
+  assert.equal(result.status, 0, result.stderr);
+
+  assert.ok(result.stdout.trim().endsWith('ncw-flavor1-v33.0.9.812.zip'));
+  assert.deepEqual(parse(result.stderr), {
+    flavor: 'flavor1',
+    order: ['bases/common', 'flavors/flavor1'],
+    apps: { activity: 'default', dav: 'always', demo: 'always', files: 'always', firstrunwizard: 'removed', workflowengine: 'removed' },
+    app_folders: ['apps-flavor1'],
+    themes: [],
+    config_files: {
+      '10-core.config.php': 'bases/common/config/10-core.config.php',
+      '50-flavor.config.php': 'flavors/flavor1/config/50-flavor.config.php',
+    },
+    env: [],
+  });
 });
