@@ -73,7 +73,7 @@ function dropInstallFlagAndUpdater(tree: Tree): void {
 }
 
 /** Appended to the version file: reads the build number file and adds it as a fifth version element. */
-const BUILD_NUMBER_SNIPPET = `
+export const BUILD_NUMBER_SNIPPET = `
 $buildNumberFile = __DIR__ . '/.buildnumber';
 if (file_exists($buildNumberFile)) {
 	$buildNumberContent = @file_get_contents($buildNumberFile);

@@ -108,6 +108,33 @@ The artifact root gets `app-config.json` (`{"apps": ...}`, sorted, placeholders 
 removes, that is only those in the `shippedApps` list of the tree's `core/shipped.json`; a removed app the tree
 does not ship is not listed). Secrets are never written: only `${VAR}` placeholders.
 
+## Validate an artifact
+
+```
+node src/cli.ts validate --flavors .. --flavor flavor1 --artifact <zip or unpacked directory>
+```
+
+Static checks of a produced artifact against the resolved flavor. Exit 0 when every rule passes; otherwise exit 2
+with every violation on stderr, each naming the file or app. Warnings (an app without a mode in a `dev` artifact)
+go to stderr and do not fail.
+
+- Config: `config/` holds exactly the flavor's partial configs, the generated files (`GENERATED_CONFIGS` in
+  `validate.ts`, today `00-apps-paths.config.php`; each must be present) and upstream's `config.sample.php` and
+  `.htaccess`. Anything else is an unexpected file; a missing expected file is an error.
+- Apps: an app is a folder with `appinfo/info.xml` directly below `apps/` or an active app folder. A removed app
+  that is present and a non-removed app of the flavor that is absent are errors. An app with no mode in the flavor
+  is an error unless `version.json` says `kind` is `dev`, which makes it a warning.
+- Shipped lists (`core/shipped.json`): a removed app is in none of the three lists; an `always` app is in
+  `alwaysEnabled`; a `default` app is in `defaultEnabled` and not in `alwaysEnabled`; an `available` app is in
+  neither; an added app (one not in the server's own `apps/`) is never in `shippedApps`.
+- Forbidden entries (constants in `validate.ts`): `config/CAN_INSTALL`, `updater/`, and `.git`, `.github`,
+  `.gitignore`, `.gitmodules`, `node_modules` at any depth, plus `tests` and `test` folders inside an app.
+- Version files: `version.json`, `.buildnumber` and `version.php` are present; `.buildnumber` is a positive
+  integer equal to `build_number` in `version.json`; `version.php` sets the channel `git` and has the build number
+  snippet exactly once.
+
+The artifact is the zip `build` wrote or the same tree unpacked; both give the same result.
+
 ## Develop
 
 ```

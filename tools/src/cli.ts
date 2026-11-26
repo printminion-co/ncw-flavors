@@ -3,6 +3,7 @@ import { buildArtifact } from './build.ts';
 import { checkCompat } from './compat.ts';
 import { InputError, requireOption } from './errors.ts';
 import { formatResolvedFlavor } from './report.ts';
+import { validateArtifact } from './validate.ts';
 import { assertValidFlavor, resolveFlavor } from './resolve.ts';
 
 const USAGE = `usage:
@@ -10,7 +11,8 @@ const USAGE = `usage:
               [--snapshot-branch <name> --release-number <n> --scope <text>] [--server-commit <sha>] [--flavors-commit <sha>]
               [--app-pins <file.json>] [--cache-keys <file.json>]
   ncw resolve --flavors <root> --flavor <name>
-  ncw check-compat --flavors <root> --flavor <name> --tree <dir>`;
+  ncw check-compat --flavors <root> --flavor <name> --tree <dir>
+  ncw validate --flavors <root> --flavor <name> --artifact <zip or directory>`;
 
 function runBuild(args: string[]): number {
   const { values } = parseArgs({
@@ -76,11 +78,22 @@ function runCheckCompat(args: string[]): number {
   return 0;
 }
 
+function runValidate(args: string[]): number {
+  const { values } = parseArgs({ args, options: { flavors: { type: 'string' }, flavor: { type: 'string' }, artifact: { type: 'string' } } });
+  const flavorsRoot = requireOption('--flavors', values.flavors);
+  const name = requireOption('--flavor', values.flavor);
+  const artifact = requireOption('--artifact', values.artifact);
+
+  validateArtifact(flavorsRoot, name, artifact);
+  return 0;
+}
+
 function main(argv: string[]): number {
   const [command, ...rest] = argv;
   if (command === 'build') return runBuild(rest);
   if (command === 'resolve') return runResolve(rest);
   if (command === 'check-compat') return runCheckCompat(rest);
+  if (command === 'validate') return runValidate(rest);
   console.error(USAGE);
   return 2;
 }

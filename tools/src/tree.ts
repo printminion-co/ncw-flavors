@@ -47,7 +47,8 @@ export function assertServerTree(dir: string): void {
   }
 }
 
-function loadTree(root: string): Tree {
+/** Reads every file below a directory into a tree. */
+export function loadTree(root: string): Tree {
   const tree: Tree = new Map();
   const walk = (folder: string): void => {
     for (const entry of readdirSync(folder, { withFileTypes: true })) {
