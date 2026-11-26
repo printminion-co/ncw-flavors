@@ -12,7 +12,8 @@ generated for the flavor, the flavor's partial configs in `config/`, `app-config
 (the sensitive, lazy and typed settings that the import cannot set), `removed-apps.json` (the vanilla apps the flavor
 drops that are in the server tree's shipped list; a dropped added or forked app is not listed), `version.json` and
 `.buildnumber`. Not in it: `updater/` (the official archive adds it from a separate repo; the
-server repo has none), `config/CAN_INSTALL` (the official archive ships it; the build deletes it), `.git`, dev files.
+server repo has none), `config/CAN_INSTALL` (the official archive ships it; the build deletes it), and the dev files
+the build strips: `.git*`, `node_modules`, `tests` and `test` folders inside apps, and the fork's `IONOS/` submodule.
 
 ## Build number and version
 
