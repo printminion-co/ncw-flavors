@@ -48,12 +48,16 @@ flavor. An app without one is an error in release builds and a warning in dev bu
 The artifact is self-contained: the flavor's partial configs are real files in its `config/`. Nextcloud reads
 `config.php` if one exists, then every `*.config.php` in that directory in natural sort order, later wins. The
 numeric prefix makes the order visible: bases use 10–49, flavors 50–89. Numbers 00–09 are reserved for files the
-build tool generates, such as the apps-paths partial config, so they sort before the bases and flavors. The build
-rejects two files with the same number in one resolved flavor. Deployment-generated partial files must not start
-with a digit, so they sort after the flavor's files and win on shared keys.
+build tool generates, such as the apps-paths partial config, so they sort before the bases and flavors, and a base or
+flavor file in that range is an error. A name without a two-digit prefix is an error, and the build rejects two
+different files with the same number in one resolved flavor. A number outside the convention (for example 90–99) is
+only a warning. A file with the same name in a nearer base or in the flavor replaces the earlier one, so a flavor can
+override a base file by name. Deployment-generated partial files must not start with a digit, so they sort after the
+flavor's files and win on shared keys.
 
-Flavors must not set deployment keys (database, object store, trusted domains, `instanceid`, `passwordsalt`,
-`secret`, mail transport, `datadirectory`) or keys Nextcloud writes itself (`version`, `installed`).
+Flavors and bases must not set deployment keys (database, object store, trusted domains, `instanceid`, `passwordsalt`,
+`secret`, mail transport, `datadirectory`), keys Nextcloud writes itself (`version`, `installed`), or `apps_paths`, which
+the build generates.
 
 Server configuration is never written with `occ`.
 
