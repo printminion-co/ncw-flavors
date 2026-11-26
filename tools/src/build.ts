@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { zipSync } from 'fflate';
 import { assertNoDuplicateApps, assertRemovedAppsAreUnlisted, checkClassification, discoverApps } from './apps.ts';
 import { InputError, requireOption } from './errors.ts';
@@ -7,6 +7,7 @@ import { assertAppsCompatible } from './compat.ts';
 import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
 import { assembleAppConfig, removedApps } from './appconfig.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
+import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type ShippedLists, type Tree } from './tree.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
@@ -52,9 +53,7 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
   if (!/^[0-9]+$/.test(raw.line)) {
     throw new InputError(`--line must be a stable line number such as 33, got "${raw.line}"`);
   }
-  if (!existsSync(raw.tree) || !statSync(raw.tree).isDirectory() || !existsSync(join(raw.tree, 'version.php'))) {
-    throw new InputError(`the tree ${raw.tree} does not exist or is not a Nextcloud tree (no version.php)`);
-  }
+  assertServerTree(raw.tree);
   return {
     flavorsRoot: raw.flavorsRoot,
     flavor: raw.flavor,
@@ -65,42 +64,6 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
     out: raw.out,
     metadata: validateMetadataInputs(raw.metadata ?? {}, raw.kind),
   };
-}
-
-/** The files of a tree, by path relative to its root. */
-export type Tree = Map<string, Uint8Array>;
-
-export function loadTree(root: string): Tree {
-  const tree: Tree = new Map();
-  const walk = (folder: string): void => {
-    for (const entry of readdirSync(folder, { withFileTypes: true })) {
-      const path = join(folder, entry.name);
-      if (entry.isDirectory()) walk(path);
-      else tree.set(relative(root, path), new Uint8Array(readFileSync(path)));
-    }
-  };
-  walk(root);
-  return tree;
-}
-
-function readText(tree: Tree, path: string): string {
-  const bytes = tree.get(path);
-  if (!bytes) throw new InputError(`the tree has no ${path}`);
-  return new TextDecoder().decode(bytes);
-}
-
-function writeText(tree: Tree, path: string, content: string): void {
-  tree.set(path, new TextEncoder().encode(content));
-}
-
-function deleteWhere(tree: Tree, matches: (path: string) => boolean): void {
-  for (const path of [...tree.keys()]) if (matches(path)) tree.delete(path);
-}
-
-export function baseRelease(tree: Tree): string {
-  const match = /\$OC_VersionString\s*=\s*'([^']+)'/.exec(readText(tree, 'version.php'));
-  if (!match?.[1]) throw new InputError('the tree has no $OC_VersionString in its version file');
-  return match[1];
 }
 
 /** The official artifact ships an install flag file and a web updater; neither belongs in a flavor. */
@@ -133,21 +96,6 @@ function rewriteVersionFile(tree: Tree): void {
   // A tree that was processed before already has the snippet; appending it again would add the build number twice.
   const processed = withChannel.includes(BUILD_NUMBER_SNIPPET.trim());
   writeText(tree, 'version.php', processed ? withChannel : withChannel + BUILD_NUMBER_SNIPPET);
-}
-
-interface ShippedLists {
-  shippedApps: string[];
-  defaultEnabled: string[];
-  alwaysEnabled: string[];
-}
-
-function readShippedLists(tree: Tree): ShippedLists {
-  const text = readText(tree, 'core/shipped.json');
-  try {
-    return JSON.parse(text) as ShippedLists;
-  } catch {
-    throw new InputError('core/shipped.json in the tree is not valid JSON');
-  }
 }
 
 const withoutApp = (list: string[], id: string): string[] => list.filter((x) => x !== id);
@@ -238,8 +186,7 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   const configCheck = checkConfigs(flavor, options.flavorsRoot);
   const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
   const warnings = [...configCheck.warnings, ...checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]))];
-  const tree = loadTree(options.tree);
-  const release = baseRelease(tree);
+  const { files: tree, release } = loadServerTree(options.tree);
   if (!release.startsWith(`${options.line}.`)) {
     throw new InputError(`line ${options.line} does not match the tree's base release ${release}`);
   }

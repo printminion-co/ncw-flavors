@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { InputError } from './errors.ts';
-import type { ResolvedFlavor } from './resolve.ts';
+import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
+import { assertServerTree, loadServerTree } from './tree.ts';
 
 const TITLE = 'App version compatibility';
 
@@ -72,4 +73,13 @@ export function assertAppsCompatible(
   if (failures.length > 0) {
     throw new InputError(`app version compatibility check failed on the ${stage}:\n  ${failures.join('\n  ')}`);
   }
+}
+
+/** The `check-compat` command: the apps of a server checkout against its own version. */
+export function checkCompat(flavorsRoot: string, flavorName: string, treeDir: string): void {
+  assertValidFlavor(flavorsRoot, flavorName);
+  assertServerTree(treeDir);
+  const flavor = resolveFlavor(flavorsRoot, flavorName);
+  const { files, release } = loadServerTree(treeDir);
+  assertAppsCompatible(files, flavor, release, treeDir, 'source tree');
 }

@@ -1,15 +1,7 @@
 import { InputError } from './errors.ts';
 import type { ResolvedFlavor } from './resolve.ts';
+import type { Files, ShippedLists } from './tree.ts';
 
-/** The files of a tree by path relative to its root (the shape the build works on). */
-type Files = ReadonlyMap<string, Uint8Array>;
-
-/** The three generated lists, as `core/shipped.json` holds them. */
-export interface ShippedLists {
-  shippedApps: string[];
-  defaultEnabled: string[];
-  alwaysEnabled: string[];
-}
 
 /**
  * The apps of the tree and of the flavor's active app folders: app id to the folders it is in. An app is a
