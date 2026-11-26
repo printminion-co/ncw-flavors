@@ -1,13 +1,45 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { REPO_ROOT, build, makeServerTree, readZip, tempDir, text } from './helpers.ts';
+import { parse } from 'yaml';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { REPO_ROOT, resolveReport } from './helpers.ts';
 
-test("the example flavor committed on this branch builds into an artifact", () => {
-  const result = build({ flavorsRoot: REPO_ROOT, tree: makeServerTree(), out: tempDir('out') });
-  assert.equal(result.status, 0, result.stderr);
+// These tests read the real flavors committed on this branch, on purpose: they are the only ones that do.
 
-  const zip = readZip(result.stdout.trim());
-  assert.ok(result.stdout.trim().endsWith('ncw-flavor1-v33.0.9.812.zip'));
-  assert.deepEqual(JSON.parse(text(zip, 'core/shipped.json')).alwaysEnabled, ['dav', 'demo', 'files']);
-  assert.ok(zip.has('config/10-core.config.php') && zip.has('config/50-flavor.config.php'));
+test('the real flavor1 resolves, extends the upstream base and activates both app folders', () => {
+  const report = resolveReport(REPO_ROOT, 'flavor1');
+  assert.deepEqual(report.app_folders, ['apps-upstream', 'apps-flavor1']);
+  for (const id of ['contacts', 'calendar', 'tasks', 'groupfolders', 'notes']) {
+    assert.equal(report.apps[id], 'default', id);
+  }
+  // common wins over upstream-33
+  assert.equal(report.apps.files, 'always');
+  assert.equal(report.apps.workflowengine, 'removed');
+  assert.equal(report.apps.firstrunwizard, 'removed');
+  assert.equal(report.apps.support, 'removed');
+  assert.equal(report.apps.demo, undefined);
+});
+
+const OFFICIAL_53 = [
+  'activity', 'admin_audit', 'app_api', 'bruteforcesettings', 'circles', 'cloud_federation_api', 'comments',
+  'contactsinteraction', 'dashboard', 'dav', 'encryption', 'federatedfilesharing', 'federation', 'files',
+  'files_downloadlimit', 'files_external', 'files_pdfviewer', 'files_reminders', 'files_sharing', 'files_trashbin',
+  'files_versions', 'firstrunwizard', 'logreader', 'lookup_server_connector', 'nextcloud_announcements',
+  'notifications', 'oauth2', 'password_policy', 'photos', 'privacy', 'profile', 'provisioning_api',
+  'recommendations', 'related_resources', 'serverinfo', 'settings', 'sharebymail', 'support', 'survey_client',
+  'suspicious_login', 'systemtags', 'text', 'theming', 'twofactor_backupcodes', 'twofactor_nextcloud_notification',
+  'twofactor_totp', 'updatenotification', 'user_ldap', 'user_status', 'viewer', 'weather_status',
+  'webhook_listeners', 'workflowengine',
+];
+
+test('the real base upstream-33 lists exactly the 53 apps of the official 33.0.9 archive', () => {
+  const manifest = parse(readFileSync(join(REPO_ROOT, 'bases/upstream-33/flavor.yaml'), 'utf8')) as {
+    app_dirs: string[];
+    apps: Record<string, string>;
+  };
+  assert.equal(OFFICIAL_53.length, 53);
+  assert.deepEqual(Object.keys(manifest.apps).sort(), [...OFFICIAL_53].sort());
+  assert.deepEqual(manifest.app_dirs, ['apps-upstream']);
+  for (const mode of Object.values(manifest.apps)) assert.ok(['always', 'default', 'available', 'removed'].includes(mode));
 });

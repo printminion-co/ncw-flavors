@@ -1,0 +1,69 @@
+# Base: every app of the official Nextcloud 33.0.9 archive (53 apps) with its upstream mode.
+#
+# Generated from core/shipped.json of the fork tree at v33.0.9 (alwaysEnabled -> always, defaultEnabled -> default,
+# any other shipped app -> available). The app set is the fork's apps/ (30 shipped apps, without the test fixture
+# `testing`), the 22 submodules of apps-upstream/ and `support`. Regenerate (from the fork checkout, then review
+# the diff and update the tests' expected list) with:
+#
+#   jq -r '. as $s | $s.shippedApps[] | . as $a | "  \($a): " + (if ($s.alwaysEnabled|index($a)) then "always"
+#     elif ($s.defaultEnabled|index($a)) then "default" else "available" end)' core/shipped.json
+#
+# The list is complete on purpose: flavors extending this base leave no app unclassified. The out-of-tree
+# apps come from the app folder apps-upstream (submodules pinned by the fork, see .github/ionos/ionos-app-pins.md).
+app_dirs: [apps-upstream]
+apps:
+  activity: default
+  admin_audit: available
+  app_api: default
+  bruteforcesettings: default
+  circles: default
+  cloud_federation_api: always
+  comments: default
+  contactsinteraction: default
+  dashboard: default
+  dav: always
+  encryption: available
+  federatedfilesharing: always
+  federation: default
+  files: always
+  files_downloadlimit: default
+  files_external: available
+  files_pdfviewer: default
+  files_reminders: default
+  files_sharing: default
+  files_trashbin: default
+  files_versions: default
+  firstrunwizard: default
+  logreader: default
+  lookup_server_connector: always
+  nextcloud_announcements: default
+  notifications: default
+  oauth2: always
+  password_policy: default
+  photos: default
+  privacy: default
+  profile: always
+  provisioning_api: always
+  recommendations: default
+  related_resources: default
+  serverinfo: default
+  settings: always
+  sharebymail: default
+  survey_client: default
+  suspicious_login: available
+  systemtags: default
+  text: default
+  theming: always
+  twofactor_backupcodes: always
+  twofactor_nextcloud_notification: available
+  twofactor_totp: default
+  updatenotification: default
+  user_ldap: available
+  user_status: default
+  viewer: always
+  weather_status: default
+  webhook_listeners: default
+  workflowengine: always
+  # `support` is in the official archive (and in shippedApps) but is not pinned: its upstream repository
+  # (nextcloud-gmbh/support) is not public, so it cannot be built from source. Removed, not available.
+  support: removed

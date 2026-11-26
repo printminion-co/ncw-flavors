@@ -1,5 +1,14 @@
-extends: [common]
-app_dirs: [apps-flavor1]
+# Order matters, the last entry wins: upstream-33 classifies every app of the official 33.0.9 archive, common
+# then forces files and dav on and removes workflowengine and firstrunwizard.
+extends: [upstream-33, common]
+# apps-upstream comes from the base upstream-33; apps-flavor1 holds the apps only this flavor adds (submodules).
+app_dirs: [apps-upstream, apps-flavor1]
 apps:
   activity: default
-  demo: always
+  # The added apps are `default`: enabled at install so users have them at once, but an admin may disable them.
+  # They are not `always`, which would make them impossible to switch off.
+  contacts: default
+  calendar: default
+  tasks: default
+  groupfolders: default
+  notes: default
