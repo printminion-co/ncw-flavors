@@ -33,7 +33,9 @@ The manifest has no version field and no per-line block. Each stable line has it
 ## Composition
 
 `extends` is an ordered list. Bases may extend bases; cycles are rejected. Resolution is depth first and the last
-entry wins, per app id and per config file name. The build prints the fully resolved flavor for review.
+entry wins, per app id, per config file name and per environment variable; themes and app folders are an ordered
+union. A base reached through more than one path is applied once, where it is first reached, so that applying it
+again later cannot undo an override made in between. The build prints the fully resolved flavor for review.
 
 ## The app list is a complete allowlist
 
