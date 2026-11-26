@@ -2,6 +2,7 @@ import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from 'yaml';
 import { InputError } from './errors.ts';
+import { compareStrings } from './util.ts';
 
 export type Mode = 'always' | 'default' | 'available' | 'removed';
 const MODES: readonly string[] = ['always', 'default', 'available', 'removed'];
@@ -107,7 +108,7 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
   const configs: Record<string, string> = {};
   const configFolder = join(folder, name, 'config');
   if (existsSync(configFolder)) {
-    for (const file of readdirSync(configFolder).filter((f) => f.endsWith('.config.php')).sort()) {
+    for (const file of readdirSync(configFolder).filter((f) => f.endsWith('.config.php')).sort(compareStrings)) {
       configs[file] = join(configFolder, file);
     }
   }

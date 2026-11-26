@@ -1,7 +1,7 @@
 import { InputError } from './errors.ts';
+import { compareStrings } from './util.ts';
 import type { ResolvedFlavor } from './resolve.ts';
 import type { Files, ShippedLists } from './tree.ts';
-
 
 /** The folders that hold apps: the server's own `apps` first, then the flavor's active app folders in their order. */
 export function appRoots(flavor: ResolvedFlavor): string[] {
@@ -19,13 +19,13 @@ export function discoverApps(tree: Files, flavor: ResolvedFlavor): Map<string, s
   const folders = appRoots(flavor);
   const found = new Map<string, string[]>();
   const ids = new Set<string>();
-  for (const path of [...tree.keys()].sort()) {
+  for (const path of [...tree.keys()].sort(compareStrings)) {
     const parts = path.split('/');
     if (parts.length === 4 && parts[2] === 'appinfo' && parts[3] === 'info.xml') ids.add(`${parts[0]}/${parts[1]}`);
   }
   // server tree first, then the folders in the order the flavor declares them
   for (const folder of folders) {
-    for (const entry of [...ids].sort()) {
+    for (const entry of [...ids].sort(compareStrings)) {
       const [at, id] = entry.split('/') as [string, string];
       if (at === folder) found.set(id, [...(found.get(id) ?? []), folder]);
     }
@@ -46,7 +46,7 @@ export function assertNoDuplicateApps(apps: Map<string, string[]>): void {
  * the unclassified apps.
  */
 export function checkClassification(apps: Map<string, string[]>, flavor: ResolvedFlavor, kind: 'dev' | 'release'): string[] {
-  const unclassified = [...apps.keys()].filter((id) => !flavor.apps.has(id)).sort();
+  const unclassified = [...apps.keys()].filter((id) => !flavor.apps.has(id)).sort(compareStrings);
   if (kind === 'release' && unclassified.length > 0) {
     throw new InputError(`release builds need a mode for every app, unclassified apps: ${unclassified.join(', ')}`);
   }

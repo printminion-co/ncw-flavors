@@ -8,6 +8,7 @@ import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMe
 import { assembleAppConfig, removedApps } from './appconfig.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
 import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type ShippedLists, type Tree } from './tree.ts';
+import { compareStrings, renderJson } from './util.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
 export type BuildKind = 'dev' | 'release';
@@ -125,12 +126,12 @@ function applyAppModes(tree: Tree, flavor: ResolvedFlavor): void {
     }
   }
   const generated: ShippedLists = {
-    shippedApps: [...lists.shippedApps].sort(),
-    defaultEnabled: [...lists.defaultEnabled].sort(),
-    alwaysEnabled: [...lists.alwaysEnabled].sort(),
+    shippedApps: [...lists.shippedApps].sort(compareStrings),
+    defaultEnabled: [...lists.defaultEnabled].sort(compareStrings),
+    alwaysEnabled: [...lists.alwaysEnabled].sort(compareStrings),
   };
   assertRemovedAppsAreUnlisted(generated, flavor);
-  writeText(tree, 'core/shipped.json', JSON.stringify(generated, null, 4) + '\n');
+  writeText(tree, 'core/shipped.json', renderJson(generated, 4));
 }
 
 /**
@@ -155,9 +156,9 @@ function addPartialConfigs(tree: Tree, flavor: ResolvedFlavor): void {
 
 /** The files the deployment reads: the app-config template, the settings the import cannot set, the removed apps. */
 function writeDeploymentFiles(tree: Tree, appConfig: ReturnType<typeof assembleAppConfig>, removed: string[]): void {
-  writeText(tree, 'app-config.json', JSON.stringify({ apps: appConfig.apps }, null, 2) + '\n');
-  writeText(tree, 'app-config-special.json', JSON.stringify(appConfig.special, null, 2) + '\n');
-  writeText(tree, 'removed-apps.json', JSON.stringify(removed, null, 2) + '\n');
+  writeText(tree, 'app-config.json', renderJson({ apps: appConfig.apps }, 2));
+  writeText(tree, 'app-config-special.json', renderJson(appConfig.special, 2));
+  writeText(tree, 'removed-apps.json', renderJson(removed, 2));
 }
 
 /** A fixed timestamp (the earliest a zip can store), so the clock never leaks into an artifact. */
@@ -166,7 +167,7 @@ const FIXED_TIME = new Date(1980, 0, 1, 0, 0, 0);
 /** Zips the tree with sorted entries and fixed timestamps, so equal inputs give equal bytes. */
 function zipTree(tree: Tree): Uint8Array {
   const entries: Record<string, [Uint8Array, { mtime: Date }]> = {};
-  for (const path of [...tree.keys()].sort()) entries[path] = [tree.get(path) as Uint8Array, { mtime: FIXED_TIME }];
+  for (const path of [...tree.keys()].sort(compareStrings)) entries[path] = [tree.get(path) as Uint8Array, { mtime: FIXED_TIME }];
   return zipSync(entries);
 }
 

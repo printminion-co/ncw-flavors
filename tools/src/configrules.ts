@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { relative, sep } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { InputError } from './errors.ts';
 import type { ResolvedFlavor } from './resolve.ts';
+import { compareStrings, relativePosix } from './util.ts';
 
 const CONFIG_NAME = /^(\d\d)-.+\.config\.php$/;
 
@@ -70,7 +70,7 @@ export function checkConfigs(flavor: ResolvedFlavor, flavorsRoot: string): Confi
   const sources: string[] = [];
   const warnings: string[] = [];
   for (const [file, source] of flavor.configs) {
-    const rel = relative(flavorsRoot, source).split(sep).join('/');
+    const rel = relativePosix(flavorsRoot, source);
     const owner = rel.startsWith('bases/') ? 'bases' : 'flavors';
     const match = CONFIG_NAME.exec(file);
     if (!match) throw new InputError(`${rel}: a partial config must be named NN-<name>.config.php with a two digit number`);
@@ -92,7 +92,7 @@ export function checkConfigs(flavor: ResolvedFlavor, flavorsRoot: string): Confi
   const envReferences = new Map<string, string>();
   const keys = sources.length > 0 ? configKeys(sources) : {};
   for (const source of sources) {
-    const rel = relative(flavorsRoot, source).split(sep).join('/');
+    const rel = relativePosix(flavorsRoot, source);
     for (const key of keys[source] ?? []) {
       const reason = forbiddenReason(key);
       if (reason) throw new InputError(`${rel}: the key "${key}" is not allowed in a flavor config, it is ${reason}`);
@@ -110,7 +110,7 @@ export function checkEnvironment(flavor: ResolvedFlavor, references: Map<string,
   for (const [name, where] of references) {
     if (!flavor.env.has(name)) throw new InputError(`${where}: environment variable ${name} is used but not declared in a manifest`);
   }
-  return [...flavor.env.keys()].sort()
+  return [...flavor.env.keys()].sort(compareStrings)
     .filter((name) => !references.has(name))
     .map((name) => `warning: environment variable ${name} is declared but not used`);
 }

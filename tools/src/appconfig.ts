@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { join } from 'node:path';
 import { InputError } from './errors.ts';
 import type { ResolvedFlavor } from './resolve.ts';
+import { compareStrings, isPlainObject, relativePosix } from './util.ts';
 
 /** A plain app setting as `occ config:import` takes it; null deletes the key. */
 export type PlainValue = string | number | null;
@@ -28,9 +29,6 @@ export interface AppConfig {
 const TYPES = ['string', 'integer', 'float', 'boolean', 'array'];
 const PLACEHOLDER = /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const WHOLE_PLACEHOLDER = /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/;
-const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
-
-const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
 function placeholdersIn(value: string, file: string, into: Map<string, string>): void {
   for (const m of value.matchAll(PLACEHOLDER)) if (!into.has(m[1] as string)) into.set(m[1] as string, file);
@@ -49,7 +47,7 @@ export function assembleAppConfig(flavor: ResolvedFlavor, flavorsRoot: string): 
   for (const dir of flavor.dirs) {
     const path = join(dir, 'app-config.json');
     if (!existsSync(path)) continue;
-    const rel = relative(flavorsRoot, path).split(sep).join('/');
+    const rel = relativePosix(flavorsRoot, path);
     const fail = (message: string): never => { throw new InputError(`${rel}: ${message}`); };
 
     let document: unknown;
@@ -58,15 +56,15 @@ export function assembleAppConfig(flavor: ResolvedFlavor, flavorsRoot: string): 
     } catch {
       return fail('is not valid JSON');
     }
-    if (!isObject(document)) return fail('must be a JSON object');
+    if (!isPlainObject(document)) return fail('must be a JSON object');
     for (const section of Object.keys(document)) {
       if (section !== 'apps' && section !== 'special') fail(`unknown section "${section}", only "apps" and "special" are allowed (the system section is never used)`);
     }
 
     const plain = document.apps ?? {};
-    if (!isObject(plain)) return fail('"apps" must be an object of app to key to value');
+    if (!isPlainObject(plain)) return fail('"apps" must be an object of app to key to value');
     for (const [app, keys] of Object.entries(plain)) {
-      if (!isObject(keys)) return fail(`apps.${app} must be an object of key to value`);
+      if (!isPlainObject(keys)) return fail(`apps.${app} must be an object of key to value`);
       for (const [key, value] of Object.entries(keys)) {
         if (value !== null && typeof value !== 'string' && !Number.isInteger(value)) {
           fail(`apps.${app}.${key} must be a string, an integer or null`);
@@ -79,7 +77,7 @@ export function assembleAppConfig(flavor: ResolvedFlavor, flavorsRoot: string): 
     const list = document.special ?? [];
     if (!Array.isArray(list)) return fail('"special" must be a list');
     for (const entry of list) {
-      if (!isObject(entry) || typeof entry.app !== 'string' || typeof entry.key !== 'string' || typeof entry.value !== 'string') {
+      if (!isPlainObject(entry) || typeof entry.app !== 'string' || typeof entry.key !== 'string' || typeof entry.value !== 'string') {
         return fail('every special entry needs a string app, key and value');
       }
       const where = `special ${entry.app}.${entry.key}`;
@@ -106,15 +104,15 @@ export function assembleAppConfig(flavor: ResolvedFlavor, flavorsRoot: string): 
   }
 
   const sortedApps: AppConfig['apps'] = {};
-  for (const app of Object.keys(apps).sort(compare)) {
+  for (const app of Object.keys(apps).sort(compareStrings)) {
     const keys = apps[app] as Record<string, PlainValue>;
-    sortedApps[app] = Object.fromEntries(Object.keys(keys).sort(compare).map((k) => [k, keys[k] as PlainValue]));
+    sortedApps[app] = Object.fromEntries(Object.keys(keys).sort(compareStrings).map((k) => [k, keys[k] as PlainValue]));
   }
-  const sortedSpecial = [...special.values()].sort((a, b) => compare(a.app, b.app) || compare(a.key, b.key));
+  const sortedSpecial = [...special.values()].sort((a, b) => compareStrings(a.app, b.app) || compareStrings(a.key, b.key));
   return { apps: sortedApps, special: sortedSpecial, envReferences };
 }
 
 /** The apps the flavor removes that the server tree ships, sorted. */
 export function removedApps(flavor: ResolvedFlavor, shippedApps: string[]): string[] {
-  return [...flavor.apps].filter(([id, mode]) => mode === 'removed' && shippedApps.includes(id)).map(([id]) => id).sort(compare);
+  return [...flavor.apps].filter(([id, mode]) => mode === 'removed' && shippedApps.includes(id)).map(([id]) => id).sort(compareStrings);
 }

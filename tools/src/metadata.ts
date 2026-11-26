@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { InputError } from './errors.ts';
+import { compareStrings, isPlainObject, renderJson, withSortedKeys } from './util.ts';
 
 /** The pipeline-supplied inputs for the build metadata, as the command line hands them over (not yet checked). */
 export interface RawMetadataOptions {
@@ -32,10 +33,10 @@ function readJsonObject(option: string, path: string): Record<string, unknown> {
   } catch {
     throw new InputError(`${option}: ${path} is not valid JSON`);
   }
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) {
+  if (!isPlainObject(data)) {
     throw new InputError(`${option}: ${path} must hold a JSON object keyed by app id`);
   }
-  return data as Record<string, unknown>;
+  return data;
 }
 
 /** Reads a file of `app id -> { fields }`, where every field is a non-empty string and no other field is allowed. */
@@ -43,12 +44,12 @@ function readEntries<F extends string>(option: string, path: string | undefined,
   const result: Record<string, Record<F, string>> = {};
   if (path === undefined) return result;
   const data = readJsonObject(option, path);
-  for (const id of Object.keys(data).sort()) {
+  for (const id of Object.keys(data).sort(compareStrings)) {
     const entry = data[id];
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+    if (!isPlainObject(entry)) {
       throw new InputError(`${option}: the entry of ${id} must be an object with ${fields.join(' and ')}`);
     }
-    const record = entry as Record<string, unknown>;
+    const record = entry;
     for (const name of Object.keys(record)) {
       if (!fields.includes(name as F)) throw new InputError(`${option}: the entry of ${id} has an unknown field ${name}`);
     }
@@ -102,9 +103,5 @@ export function renderMetadata(inputs: MetadataInputs, flavor: string, baseRelea
     server_commit: inputs.serverCommit, flavors_commit: inputs.flavorsCommit,
     apps: inputs.apps, cached_builds: inputs.cachedBuilds,
   };
-  const sorted = (value: unknown): unknown => {
-    if (typeof value !== 'object' || value === null) return value;
-    return Object.fromEntries(Object.entries(value).filter(([, v]) => v !== undefined).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, v]) => [k, sorted(v)]));
-  };
-  return JSON.stringify(sorted(fields), null, 2) + '\n';
+  return renderJson(withSortedKeys(fields), 2);
 }

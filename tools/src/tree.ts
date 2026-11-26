@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 import { InputError } from './errors.ts';
+import { relativePosix } from './util.ts';
 
 /** The files of a tree, read-only: path relative to the root to content. */
 export type Files = ReadonlyMap<string, Uint8Array>;
@@ -52,7 +53,7 @@ function loadTree(root: string): Tree {
     for (const entry of readdirSync(folder, { withFileTypes: true })) {
       const path = join(folder, entry.name);
       if (entry.isDirectory()) walk(path);
-      else tree.set(relative(root, path), new Uint8Array(readFileSync(path)));
+      else tree.set(relativePosix(root, path), new Uint8Array(readFileSync(path)));
     }
   };
   walk(root);
