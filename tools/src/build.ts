@@ -10,8 +10,9 @@ import { assertAppsCompatible } from './compat.ts';
 import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
 import { assembleAppConfig, type AppConfig } from './appconfig.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
-import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, readText, writeText, type Files, type ShippedLists, type Tree } from './tree.ts';
+import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, writeText, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, renderJson } from './util.ts';
+import { renderVersionFile } from './versionfile.ts';
 import { applyThemes, checkThemes } from './themes.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
 
@@ -72,33 +73,6 @@ function validateOptions(raw: RawBuildOptions): BuildOptions {
 /** Strips what never ships: the install flag file, the web updater, VCS and CI files, dependencies, tests of apps, the flavors submodule. */
 function stripDevFiles(tree: Tree, flavor: ResolvedFlavor): void {
   deleteWhere(tree, (path) => isDevFile(path, flavor.appFolders));
-}
-
-/** Appended to the version file: reads the build number file and adds it as a fifth version element. */
-export const BUILD_NUMBER_SNIPPET = `
-$buildNumberFile = __DIR__ . '/.buildnumber';
-if (file_exists($buildNumberFile)) {
-	$buildNumberContent = @file_get_contents($buildNumberFile);
-	if ($buildNumberContent !== false) {
-		$buildId = (int)trim($buildNumberContent);
-		if ($buildId > 0) {
-			// Append build ID as 5th element in version array
-			$OC_Version[] = $buildId;
-		}
-	}
-}
-`;
-
-/** The version file of the artifact: channel set to git (no integrity enforcement), build number snippet appended. */
-function renderVersionFile(files: Files): string {
-  const version = readText(files, 'version.php');
-  const withChannel = version.replace(/(\$OC_Channel\s*=\s*)'[^']*';/, "$1'git';");
-  if (withChannel === version && !/\$OC_Channel\s*=\s*'git';/.test(version)) {
-    throw new InputError('the version file has no $OC_Channel to set');
-  }
-  // A tree that was processed before already has the snippet; appending it again would add the build number twice.
-  const processed = withChannel.includes(BUILD_NUMBER_SNIPPET.trim());
-  return processed ? withChannel : withChannel + BUILD_NUMBER_SNIPPET;
 }
 
 const withoutApp = (list: string[], id: string): string[] => list.filter((x) => x !== id);

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { discoverApps } from './apps.ts';
-import { BUILD_NUMBER_SNIPPET } from './build.ts';
+import { BUILD_NUMBER_SNIPPET } from './versionfile.ts';
 import { configNumber } from './configrules.ts';
 import { isDevFile } from './devfiles.ts';
 import { InputError } from './errors.ts';
