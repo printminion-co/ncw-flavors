@@ -271,3 +271,18 @@ test('every violation is listed, not just the first', () => {
   files.delete('.buildnumber');
   assertFails(files, /99-extra\.config\.php/, /app stranger/, /updater\/index\.php/, /\.buildnumber/);
 });
+
+// flavor and config numbers
+
+test('a version.json that is for another flavor fails and names both flavors', () => {
+  const { files } = produced();
+  const version = JSON.parse(text(files, 'version.json')) as Record<string, unknown>;
+  put(files, 'version.json', JSON.stringify({ ...version, flavor: 'other' }, null, 2) + '\n');
+  assertFails(files, /version\.json is for flavor "other" but the flavor to validate is "flavor1"/);
+});
+
+test('two config files with the same number fail and both are named', () => {
+  const { files } = produced();
+  put(files, 'config/50-other.config.php', '<?php\n');
+  assertFails(files, /config files config\/50-flavor\.config\.php and config\/50-other\.config\.php share the number 50/);
+});

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { discoverApps } from './apps.ts';
 import { BUILD_NUMBER_SNIPPET } from './build.ts';
+import { configNumber } from './configrules.ts';
 import { isDevFile } from './devfiles.ts';
 import { InputError } from './errors.ts';
 import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve.ts';
@@ -43,6 +44,20 @@ function checkConfig(files: Files, flavor: ResolvedFlavor, violations: string[])
   }
   for (const file of [...expected].sort(compareStrings)) {
     if (!files.has(`config/${file}`)) violations.push(`missing config file config/${file}`);
+  }
+  const byNumber = new Map<string, string[]>();
+  for (const path of present.sort(compareStrings)) {
+    const number = configNumber(path.slice('config/'.length));
+    if (number !== undefined) byNumber.set(number, [...(byNumber.get(number) ?? []), path]);
+  }
+  for (const [number, paths] of byNumber) {
+    if (paths.length > 1) violations.push(`config files ${paths.join(' and ')} share the number ${number}`);
+  }
+}
+
+function checkFlavorName(versionJson: Record<string, unknown> | undefined, flavorName: string, violations: string[]): void {
+  if (versionJson && versionJson.flavor !== flavorName) {
+    violations.push(`version.json is for flavor "${String(versionJson.flavor)}" but the flavor to validate is "${flavorName}"`);
   }
 }
 
@@ -141,6 +156,7 @@ export function validateArtifact(flavorsRoot: string, flavorName: string, artifa
 
   const violations: string[] = [];
   const versionJson = readVersionJson(files);
+  checkFlavorName(versionJson, flavorName, violations);
   checkConfig(files, flavor, violations);
   const { warnings, present } = checkApps(files, flavor, versionJson?.kind, violations);
   checkShippedLists(files, flavor, present, violations);

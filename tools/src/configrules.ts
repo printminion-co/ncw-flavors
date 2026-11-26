@@ -7,6 +7,9 @@ import { compareStrings, relativePosix } from './util.ts';
 
 const CONFIG_NAME = /^(\d\d)-.+\.config\.php$/;
 
+/** The two digit number of a partial config file name, or undefined when the name does not follow the pattern. */
+export const configNumber = (file: string): string | undefined => CONFIG_NAME.exec(file)?.[1];
+
 /** Numbers up to this one (00 to 09) are reserved for files the tool generates. */
 const RESERVED_UP_TO = 9;
 
