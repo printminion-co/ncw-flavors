@@ -237,7 +237,7 @@ export function buildArtifact(raw: RawBuildOptions): BuildResult {
   const flavor = resolveFlavor(options.flavorsRoot, options.flavor);
   const configCheck = checkConfigs(flavor, options.flavorsRoot);
   const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
-  const warnings = checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]));
+  const warnings = [...configCheck.warnings, ...checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]))];
   const tree = loadTree(options.tree);
   const release = baseRelease(tree);
   if (!release.startsWith(`${options.line}.`)) {

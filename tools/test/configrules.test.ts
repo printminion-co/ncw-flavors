@@ -61,16 +61,43 @@ test('the same file name in a nearer base replaces the earlier one and is not a 
   assert.equal(result.status, 0, result.stderr);
 });
 
-test('a base config outside 10 to 49 and a flavor config outside 50 to 89 are rejected', () => {
-  for (const [file, expected] of [
-    ['bases/b/config/05-low.config.php', /05-low\.config\.php/],
-    ['bases/b/config/50-high.config.php', /50-high\.config\.php/],
-    ['flavors/f/config/49-low.config.php', /49-low\.config\.php/],
-    ['flavors/f/config/90-high.config.php', /90-high\.config\.php/],
-    ['flavors/f/config/unnumbered.config.php', /unnumbered\.config\.php/],
-  ] as const) {
+test('a config name without a two digit number prefix is an input error', () => {
+  for (const file of ['bases/b/config/unnumbered.config.php', 'flavors/f/config/5-short.config.php', 'flavors/f/config/50.config.php']) {
+    const { result, out } = buildF({ [file]: cfg('') });
+    assert.equal(result.status, 2, file);
+    assert.match(result.stderr, new RegExp(file.split('/').pop()!.replace(/\./g, '\\.')));
+    assert.equal(existsSync(out) ? readdirSync(out).length : 0, 0, 'no artifact is written');
+  }
+});
+
+test('numbers 00 to 09 are reserved for generated files, in a base and in a flavor', () => {
+  for (const file of ['bases/b/config/05-low.config.php', 'flavors/f/config/00-mine.config.php', 'flavors/f/config/09-mine.config.php']) {
     const { result } = buildF({ [file]: cfg('') });
     assert.equal(result.status, 2, file);
-    assert.match(result.stderr, expected);
+    assert.match(result.stderr, /reserved/);
+    assert.ok(result.stderr.includes(file), result.stderr);
   }
+});
+
+test('a number outside the convention is only a warning and the build succeeds', () => {
+  const { result } = buildF({
+    'bases/b/config/50-high.config.php': cfg(''),
+    'flavors/f/config/49-low.config.php': cfg(''),
+    'flavors/f/config/90-late.config.php': cfg(''),
+    'flavors/f/config/99-last.config.php': cfg(''),
+  });
+  assert.equal(result.status, 0, result.stderr);
+  for (const file of ['bases/b/config/50-high.config.php', 'flavors/f/config/49-low.config.php', 'flavors/f/config/90-late.config.php', 'flavors/f/config/99-last.config.php']) {
+    const number = file.split('/').pop()!.slice(0, 2);
+    assert.ok(
+      result.stderr.split('\n').includes(`warning: config file ${file} uses number ${number}, bases use 10-49 and flavors use 50-89`),
+      `${file}: ${result.stderr}`,
+    );
+  }
+});
+
+test('numbers inside the convention give no warning', () => {
+  const { result } = buildF({ 'bases/b/config/10-a.config.php': cfg(''), 'bases/b/config/49-b.config.php': cfg(''), 'flavors/f/config/50-c.config.php': cfg(''), 'flavors/f/config/89-d.config.php': cfg('') });
+  assert.equal(result.status, 0, result.stderr);
+  assert.doesNotMatch(result.stderr, /warning: config file/);
 });

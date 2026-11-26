@@ -88,6 +88,30 @@ test('the artifact ships the config file of the nearer declaration', () => {
   assert.equal(text(zip, 'config/20-mail.config.php'), '<?php // base mail\n');
 });
 
+const FLAVOR_REPLACES_BASE = {
+  'bases/b/flavor.yaml': '',
+  'bases/b/config/10-core.config.php': '<?php // from the base\n',
+  'bases/b/config/20-mail.config.php': '<?php // base mail\n',
+  'flavors/f/flavor.yaml': 'extends: [b]\n',
+  'flavors/f/config/10-core.config.php': '<?php // from the flavor\n',
+};
+
+test('a flavor config file replaces the base file of the same name in the resolved flavor', () => {
+  assert.deepEqual(resolveReport(makeFlavorsRoot(FLAVOR_REPLACES_BASE), 'f').config_files, {
+    '10-core.config.php': 'flavors/f/config/10-core.config.php',
+    '20-mail.config.php': 'bases/b/config/20-mail.config.php',
+  });
+});
+
+test('the artifact ships the flavor file where it replaces a base file of the same name', () => {
+  const built = build({ flavorsRoot: makeFlavorsRoot(FLAVOR_REPLACES_BASE), flavor: 'f', tree: makeServerTree(), out: tempDir('out') });
+  assert.equal(built.status, 0, built.stderr);
+
+  const zip = readZip(built.stdout.trim());
+  assert.equal(text(zip, 'config/10-core.config.php'), '<?php // from the flavor\n');
+  assert.equal(text(zip, 'config/20-mail.config.php'), '<?php // base mail\n');
+});
+
 test('themes are an ordered union and a later environment variable declaration replaces an earlier one', () => {
   const root = makeFlavorsRoot({
     'bases/x/flavor.yaml': 'themes: [t1]\nenv:\n  - { name: A, required: true }\n',
