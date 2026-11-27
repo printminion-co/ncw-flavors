@@ -276,3 +276,12 @@ test('the default OCC is php occ in the folder of the script', skip, () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(readFileSync(join(w.dir, 'php.log'), 'utf8'), new RegExp(`^${join(w.dir, 'tree', 'occ')} config:import `, 'm'));
 });
+
+test('a placeholder of an undeclared variable (an app-config.json edited after the build) fails with a message naming it', skip, () => {
+  const w = world();
+  writeFileSync(join(w.script, '..', 'app-config.json'), JSON.stringify({ apps: { theming: { url: '${NOT_DECLARED}/x' } } }));
+  const result = runScript(w, ENV);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /the settings use \$\{NOT_DECLARED\} but the environment has no NOT_DECLARED/);
+  assert.deepEqual(calls(w), []);
+});

@@ -16,7 +16,7 @@ const FILL_PHP = String.raw`function ncw_fill($v) {
     return preg_replace_callback('/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/', function ($m) {
       $value = getenv($m[1]);
       if ($value === false) {
-        fwrite(STDERR, 'ncw-configure: the settings use ${' . $m[1] . '} but the environment has no ' . $m[1] . "\n");
+        fwrite(STDERR, 'ncw-configure: the settings use $' . '{' . $m[1] . '} but the environment has no ' . $m[1] . "\n");
         exit(1);
       }
       return $value;
@@ -107,6 +107,21 @@ ${FILL_PHP}
 PHP
 )
 
+IMPORT_PHP=$(cat <<'PHP'
+${IMPORT_PHP}
+PHP
+)
+
+SPECIAL_PHP=$(cat <<'PHP'
+${SPECIAL_PHP}
+PHP
+)
+
+ENABLED_PHP=$(cat <<'PHP'
+${ENABLED_PHP}
+PHP
+)
+
 # the declared environment: required variables must be set, optional ones fall back to their default (for the
 # placeholders only; the environment of occ is left as it is)
 missing=()
@@ -127,10 +142,10 @@ fill() { env "\${FILL_ENV[@]}" "$PHP" -r "$FILL_PHP"$'\\n'"$1" "$2" "$3"; }
 [ -f "$HERE/app-config-special.json" ] || fail "$HERE/app-config-special.json does not exist"
 
 say "importing app-config.json"
-fill ${shQuote(IMPORT_PHP)} "$HERE/app-config.json" "$WORK/app-config.json" || fail "could not fill the placeholders of app-config.json"
+fill "$IMPORT_PHP" "$HERE/app-config.json" "$WORK/app-config.json" || fail "could not fill the placeholders of app-config.json"
 "\${OCC_CMD[@]}" config:import "$WORK/app-config.json" || fail "occ config:import failed"
 
-fill ${shQuote(SPECIAL_PHP)} "$HERE/app-config-special.json" "$WORK/special.bin" || fail "could not read app-config-special.json"
+fill "$SPECIAL_PHP" "$HERE/app-config-special.json" "$WORK/special.bin" || fail "could not read app-config-special.json"
 mapfile -d '' -t SPECIAL < "$WORK/special.bin"
 for ((i = 0; i + 5 < \${#SPECIAL[@]}; i += 6)); do
   say "setting \${SPECIAL[i]} \${SPECIAL[i + 1]}"
@@ -144,7 +159,7 @@ done
 if [ \${#ENABLE_APPS[@]} -gt 0 ]; then
   "\${OCC_CMD[@]}" app:list --output=json > "$WORK/app-list.json" || fail "occ app:list failed"
   for app in "\${ENABLE_APPS[@]}"; do
-    if "$PHP" -r ${shQuote(ENABLED_PHP)} "$WORK/app-list.json" "$app"; then
+    if "$PHP" -r "$ENABLED_PHP" "$WORK/app-list.json" "$app"; then
       say "app $app is already enabled"
     else
       say "enabling app $app"
