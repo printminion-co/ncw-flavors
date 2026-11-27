@@ -53,7 +53,7 @@ test('the real flavor1 inherits the IONOS theme from the base common and enforce
   assert.deepEqual(report.themes, ['ionos']);
   assert.equal(report.enforce_theme, 'ionos');
   assert.deepEqual(Object.keys(report.config_files), [
-    '10-core.config.php', '11-theme.config.php', '50-flavor.config.php',
+    '10-core.config.php', '11-theme.config.php', '12-mail.config.php', '50-flavor.config.php',
   ]);
   const manifest = parse(readFileSync(join(REPO_ROOT, 'bases/common/flavor.yaml'), 'utf8')) as { themes: string[]; enforce_theme: string };
   assert.deepEqual(manifest.themes, ['ionos']);
@@ -70,12 +70,13 @@ test('the real base config activates the theme folder and the mail template clas
   assert.equal(result.status, 0, result.stderr);
   const zip = readZip(result.stdout.trim());
   assert.equal(configAsNextcloudSeesIt(zip, 'config/11-theme.config.php'), '{"theme":"ionos"}');
+  assert.equal(configAsNextcloudSeesIt(zip, 'config/12-mail.config.php'), '{"mail_template_class":"OC\\\\Ncw\\\\Mail\\\\IonosEMailTemplate"}');
   assert.equal(
     configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'),
     '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\IonosDarkTheme","OC\\\\Ncw\\\\Themes\\\\IonosTheme"],"enforce_theme":"ionos"}',
   );
   // the classes the config names are at the path the server's PSR-4 autoloader for OC\ looks them up, and declare that class
-  for (const fqcn of ['OC\\Ncw\\Themes\\IonosTheme', 'OC\\Ncw\\Themes\\IonosDarkTheme']) {
+  for (const fqcn of ['OC\\Ncw\\Themes\\IonosTheme', 'OC\\Ncw\\Themes\\IonosDarkTheme', 'OC\\Ncw\\Mail\\IonosEMailTemplate']) {
     const source = text(zip, `lib/private/${fqcn.slice('OC\\'.length).replaceAll('\\', '/')}.php`);
     const declared = `${/^namespace (.+);$/m.exec(source)?.[1]}\\${/^class (\w+)/m.exec(source)?.[1]}`;
     assert.equal(declared, fqcn);
@@ -85,12 +86,16 @@ test('the real base config activates the theme folder and the mail template clas
   assert.equal(runCli(['validate', '--flavors', root, '--flavor', 'f', '--artifact', result.stdout.trim()]).status, 0);
 });
 
-test('the brand values of the IONOS theme are in IonosTheme.php only: the CSS holds no color', () => {
+test('the brand values of the IONOS theme are in IonosTheme.php only: the CSS and the mail template hold no color', () => {
   const hex = /#[0-9a-fA-F]{3,8}\b/;
   const cssFolder = join(REPO_ROOT, 'themes/ionos/assets/css');
   const cssFiles = readdirSync(cssFolder);
   assert.ok(cssFiles.length >= 3, 'the per-app overrides: login, files and one more');
   for (const file of cssFiles) assert.equal(hex.test(readFileSync(join(cssFolder, file), 'utf8')), false, file);
+  // the mail template names the stock colors it replaces, and white; nothing else
+  const mail = readFileSync(join(REPO_ROOT, 'themes/ionos/mail/IonosEMailTemplate.php'), 'utf8');
+  const colors = [...mail.matchAll(new RegExp(hex, 'g'))].map((m) => m[0].toLowerCase()).sort();
+  assert.deepEqual(colors, ['#0a0a0a', '#c8c8c8', '#fefefe', '#ffffff']);
   const theme = readFileSync(join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'), 'utf8');
   assert.match(theme, /BRAND VALUES ARE IN ONE PLACE/);
   for (const line of theme.split('\n').filter((l) => hex.test(l))) assert.match(line, /PLACEHOLDER/, line);
