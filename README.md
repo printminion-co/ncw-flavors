@@ -190,26 +190,31 @@ A theme is a package `themes/<name>/` in the flavors root:
 
 ```
 themes/<name>/lib/*.php     the theme class files
+themes/<name>/mail/*.php    mail template classes (activated by the mail_template_class config, not registered)
 themes/<name>/assets/**     everything else: CSS, images, fonts, translation and template overrides
 ```
 
-Only files directly in `lib/` are classes; a nested file or folder below `lib/` is an input error naming it. A
+Only files directly in `lib/` and `mail/` are classes; a nested file or folder below them is an input error naming it. A
 theme's translation and template overrides live under `themes/<name>/assets/` and are copied to `themes/<name>/` in the artifact.
 
 A flavor (or base) lists themes in its manifest (`themes: [acme]`, an ordered union over the bases) and may
 enforce one with `enforce_theme: acme` (the last declaration wins; it must be one of the flavor's themes, and a
 theme without a package folder is an input error). `ncw resolve` shows `themes` and `enforce_theme`.
 
-The build copies each `lib/<Class>.php` to `apps/theming/lib/Themes/<Class>.php` and each asset to
-`themes/<name>/<path under assets>` in the artifact. The class name is `OCA\Theming\Themes\<file name without
-.php>`, and the theme name must equal the id the class returns; the tool cannot check that. For a flavor with at
+The build copies each `lib/<Class>.php` to `lib/private/Ncw/Themes/<Class>.php`, each `mail/<Class>.php` to
+`lib/private/Ncw/Mail/<Class>.php` and each asset to `themes/<name>/<path under assets>` in the artifact. Not to the
+theming app: its autoloader is a classmap that never finds a class added to `apps/theming/lib`, while the server's `OC\`
+namespace is loaded by PSR-4 from `lib/private`. The class name of a theme class is `OC\Ncw\Themes\<file name without
+.php>`, and the theme name must equal the id the class returns; the tool cannot check that. `validate` checks that
+every file of the theme packages is in the artifact with the same content. For a flavor with at
 least one theme the build generates `config/01-themes.config.php` (number 01 is in the range reserved for generated
 files, next to `00-apps-paths.config.php`):
 
 ```php
-$CONFIG = ['ncw.themes' => ['OCA\\Theming\\Themes\\Acme'], 'enforce_theme' => 'acme'];
+$CONFIG = ['ncw.themes' => ['OC\\Ncw\\Themes\\Acme'], 'enforce_theme' => 'acme'];
 ```
 
 `enforce_theme` is left out when no theme is enforced. A flavor config may not set `ncw.themes` or `enforce_theme`.
-The server setting `ncw.themes` is read by a generic patch in the server fork (a separate ticket); this tool only
-generates the config.
+The server setting `ncw.themes` is read by a generic patch in the server fork (`IONOS(branding): register the theme
+classes listed in ncw.themes`); this tool only generates the config. The first theme package is `themes/ionos`
+(its README says where the brand values are and where a logo and a favicon go).
