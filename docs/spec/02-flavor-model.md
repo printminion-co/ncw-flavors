@@ -23,10 +23,16 @@ apps:
   calendar:       default         # enabled at install, an admin may disable it
   talk:           available       # on disk, off until an admin enables it
   firstrunwizard: removed         # pruned from the artifact wherever it lives
+enable_after_install: [talk]      # apps (mode available) that ncw-configure.sh enables after the install
 env:
   - { name: SMTP_PASSWORD, required: true }
   - { name: PHONE_REGION,  required: false, default: DE }
 ```
+
+`enable_after_install` is an ordered list of app ids. Over `extends` it is an ordered union, like `themes`: inherited
+entries first, no duplicates. Every listed app must be in the resolved flavor with the mode `available`. An `always` or
+`default` app is enabled by the installer already (see [03-apps.md](03-apps.md)), and a `removed` or unknown app cannot
+be enabled, so the resolve and the build fail with a message naming the app and its mode. `ncw resolve` prints the list.
 
 The manifest has no version field and no per-line block. Each stable line has its own branch of the flavors repo.
 
@@ -71,7 +77,8 @@ deployment validates the environment before it starts an upgrade. Secrets never 
 
 Settings stored in the database have no file or environment mapping in Nextcloud. Each flavor ships an `apps`-only
 `app-config.json` template, assembled from bases and overrides. The deployment fills `${ENV_VAR}` placeholders and
-imports it with `occ config:import` after install and after every upgrade. Keys it lists are flavor-managed and are
+imports it with `occ config:import` after install and after every upgrade; the generated `ncw-configure.sh` does this
+(see [04-build-and-artifact.md](04-build-and-artifact.md)). Keys it lists are flavor-managed and are
 overwritten on every deploy; unlisted keys stay under admin control. Sensitive, lazy and typed values cannot be set
 by the import and are set with `occ config:app:set --sensitive/--lazy/--type`, with secrets only from the
 environment. The import's `system` section is never used.
