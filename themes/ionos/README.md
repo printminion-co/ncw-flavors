@@ -46,3 +46,21 @@ The server replaces an image of `core/img/` with the file of the same name in `t
 `assets/fonts/` holds Open Sans (SIL Open Font License 1.1): `OFL.txt` is the license, `ATTRIBUTION.txt` the
 attribution and source (googlefonts/opensans, pinned commit), `FONTLOG.txt` the font's own log. The license applies
 to the font files only.
+
+## Translation overrides
+
+`assets/{core,lib,apps/settings,apps/theming}/l10n/{en,de}.json` replace the bare word "Nextcloud" by the product name
+in the strings the server translates through its `l10n/*.json` files (the server merges these theme files over
+its own, per string). They were made once from the server's `de.json` files, by replacing the word and leaving out
+strings that name an upstream product or version (for example "Nextcloud Mail", "Nextcloud 30", "Nextcloud
+community"), and strings where a compound such as "Nextcloud-Verzeichnisse" would remain. The product name is written
+into the strings, so it is a second place to change when the name changes.
+
+Not reached: strings that the browser translates from the `l10n/*.js` files (the server loads only one file of that
+kind, so an override would replace the whole file), and text that is written in PHP or JS without translation.
+
+## Templates
+
+A template of the server is replaced by the file of the same path below `assets/`, for example
+`assets/apps/settings/templates/settings/personal/development.notice.php` (checked: the theme file is used). The
+source-link override of the development notice belongs to its own change; no template is overridden yet.

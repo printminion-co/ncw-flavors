@@ -1,0 +1,9 @@
+{
+    "translations": {
+        "Failed to add the public link to your Nextcloud": "Failed to add the public link to your IONOS Nextcloud Workspace",
+        "It looks like you are trying to reinstall your Nextcloud. However the file CAN_INSTALL is missing from your config directory. Please create the file CAN_INSTALL in your config folder to continue.": "It looks like you are trying to reinstall your IONOS Nextcloud Workspace. However the file CAN_INSTALL is missing from your config directory. Please create the file CAN_INSTALL in your config folder to continue.",
+        "Nextcloud Server": "IONOS Nextcloud Workspace",
+        "The Nextcloud login form is disabled. Use another login option if available or contact your administration.": "The IONOS Nextcloud Workspace login form is disabled. Use another login option if available or contact your administration.",
+        "This community release of Nextcloud is unsupported and push notifications are limited.": "This community release of IONOS Nextcloud Workspace is unsupported and push notifications are limited."
+    }
+}

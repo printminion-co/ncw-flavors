@@ -1,0 +1,7 @@
+{
+    "translations": {
+        "Failed to add the public link to your Nextcloud": "Der öffentliche Link konnte nicht zu deiner IONOS Nextcloud Workspace hinzugefügt werden",
+        "It looks like you are trying to reinstall your Nextcloud. However the file CAN_INSTALL is missing from your config directory. Please create the file CAN_INSTALL in your config folder to continue.": "Es sieht so aus, als ob du IONOS Nextcloud Workspace erneut installieren möchtest. Es fehlt jedoch die Datei CAN_INSTALL in deinem Konfigurationsordner. Bitte erstelle die Datei CAN_INSTALL im Konfigurationsordner um fortzufahren.",
+        "This community release of Nextcloud is unsupported and push notifications are limited.": "Diese Community-Version von IONOS Nextcloud Workspace wird nicht unterstützt und (Push-)Benachrichtigungen sind nur begrenzt verfügbar."
+    }
+}
