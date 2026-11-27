@@ -12,8 +12,20 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const REPO_ROOT = resolve(here, '../..');
 const CLI = resolve(here, '../src/cli.ts');
 
+let testRoot: string | undefined;
+
+/** One folder per test process that holds every temporary folder of the tests and is removed when the process ends. */
+function tempRoot(): string {
+  if (testRoot === undefined) {
+    const root = mkdtempSync(join(tmpdir(), 'ncw-test-'));
+    process.on('exit', () => rmSync(root, { recursive: true, force: true }));
+    testRoot = root;
+  }
+  return testRoot;
+}
+
 export function tempDir(prefix: string): string {
-  return mkdtempSync(join(tmpdir(), `ncw-${prefix}-`));
+  return mkdtempSync(join(tempRoot(), `${prefix}-`));
 }
 
 function put(root: string, rel: string, content: string): void {
