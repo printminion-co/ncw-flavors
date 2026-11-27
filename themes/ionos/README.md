@@ -44,24 +44,33 @@ below `assets/core/img/` (so `themes/ionos/core/img/` in the artifact):
 
 | File | Size | Where a user sees it |
 |---|---|---|
-| `logo/logo.svg` | 256x128 | `getLogo()`: capabilities (clients), federated sharing settings |
-| `logo/logo.png` | 252x120 | the login page and the header (`--image-logo`, `--image-logoheader`), the logo of every email (`getLogo(false)`) |
+| `logo/logo.svg` | 256x128 | the login page and the header (through the CSS variables, see below), `getLogo()`: capabilities (clients), federated sharing settings |
+| `logo/logo.png` | 252x120 | the logo of every email (`getLogo(false)`) |
 | `favicon.ico` | 32x32 | the browser tab icon (`<link rel="icon">`) |
 | `favicon-touch.png` | 180x180 | `apple-touch-icon`, the `og:image` of the login page |
 | `favicon-fb.png` | 200x200 | the `og:image` preview of a public share |
 | `favicon-mask.svg` | 16x16 | `mask-icon` (Safari pinned tab), one color |
+| `manifest.json` | - | the web app manifest (`<link rel="manifest">`): name and the two icons above |
 
 When a theme has a PNG but no SVG of a name, the server uses the PNG; both are shipped. Not shipped on purpose:
 `logo/logo-mail.png`, `logo/logo-icon-175px.png` and `logo/logo-enterprise.*` are not used by any code on 33;
 `favicon.png`, `favicon.svg` and `favicon-touch.svg` are only read by the theming app from `core/img/` directly
 (fallbacks of the routes `/apps/theming/favicon` and `/apps/theming/icon`).
 
-NOT replaceable through the theme folder: the web app manifest (`<link rel="manifest">`, route
-`/apps/theming/manifest/<app>`) and its icons. The theming routes `getTouchIcon` and `getFavicon` use the logo that
-an admin uploads (theming app setting), or generate it from `core/img/logo/logo.svg` of the server tree (hardcoded in
-`Util::getAppIcon`), or fall back to the server's `favicon-touch.png`. The closest mechanisms are the admin logo and
-favicon upload of the theming app, or a static `core/img/manifest.json` in this theme (the server prefers a theme
-file to the route; the icon paths in it are relative to the file).
+Two places need more than the file, checked on the 33 code and in a real install:
+
+- **The logo of the login page and the header is CSS.** The server's CSS says `background-image: var(--image-logo,
+  url(../../core/img/logo/logo.svg))`, and on 33 the theming app defines `--image-logo` and `--image-logoheader` only for a
+  logo an admin uploaded. Without it the browser loads the fixed `/core/img/logo/logo.svg`, which the theme folder cannot
+  replace. So `IonosTheme::getCSSVariables()` defines both variables as the theme folder's `logo/logo.svg` (looked up
+  through `imagePath`, so the web root is right) unless an admin logo exists. The theme must not drop that.
+- **`manifest.json` is a static copy.** Without it the server serves its own `core/img/manifest.json` on the login page
+  (name "Nextcloud", the Nextcloud touch icon) and the route `/apps/theming/manifest/<app>` on the other pages, whose icons
+  come from the admin upload, from `core/img/logo/logo.svg` of the server tree (hardcoded in `Util::getAppIcon`) or from
+  the server's `favicon-touch.png`: none of them reads the theme folder. A `core/img/manifest.json` in the theme wins for
+  every page, and its relative `src` and `start_url` point to the theme's icons and to the site root. The product name in
+  it is a second copy of `productName` in `bases/common/app-config.json` (a test keeps them equal); the per-app names of
+  the route are gone.
 
 ### Replacing the dummies
 

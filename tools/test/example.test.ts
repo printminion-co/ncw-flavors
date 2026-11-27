@@ -210,6 +210,7 @@ test('the real artifact carries the dummy logo set where the server looks images
     return entry;
   };
   assert.deepEqual(pngSize(bytes('logo/logo.png')), [252, 120]);
+  bytes('manifest.json');
   assert.deepEqual(pngSize(bytes('favicon-touch.png')), [180, 180]);
   assert.deepEqual(pngSize(bytes('favicon-fb.png')), [200, 200]);
   const ico = Buffer.from(bytes('favicon.ico'));
@@ -224,15 +225,33 @@ test('the real artifact carries the dummy logo set where the server looks images
   assert.equal(zip.has(`${img}/logo.png`), false);
 });
 
-test('the dummy logo files are small and nothing of the theme refers to the Nextcloud logo', () => {
+test('the dummy logo files are small and nothing of the theme CSS and mail template refers to the Nextcloud logo', () => {
   const img = join(REPO_ROOT, 'themes/ionos/assets/core/img');
   for (const file of readdirSync(img, { recursive: true, withFileTypes: true }).filter((e) => e.isFile())) {
     assert.ok(readFileSync(join(file.parentPath, file.name)).length < 8192, `${file.name} is under 8 KB`);
   }
   const sources = [
     ...readdirSync(join(REPO_ROOT, 'themes/ionos/assets/css')).map((f) => join(REPO_ROOT, 'themes/ionos/assets/css', f)),
-    join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'),
     join(REPO_ROOT, 'themes/ionos/mail/IonosEMailTemplate.php'),
   ];
   for (const path of sources) assert.doesNotMatch(readFileSync(path, 'utf8'), /img\/logo|logo\.(svg|png)|favicon/i, path);
+  // IonosTheme names the logo only through the server's image lookup, never as a path into core/img
+  assert.doesNotMatch(readFileSync(join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'), 'utf8'), /url\([^)]*core\/img/);
+});
+
+test('the web manifest of the theme names the product and points to the theme icons, and IonosTheme sets the logo variables', () => {
+  const assets = join(REPO_ROOT, 'themes/ionos/assets/core/img');
+  const manifest = JSON.parse(readFileSync(join(assets, 'manifest.json'), 'utf8')) as { name: string; start_url: string; icons: { src: string }[] };
+  const appConfig = JSON.parse(readFileSync(join(REPO_ROOT, 'bases/common/app-config.json'), 'utf8')) as { apps: { theming: { productName: string } } };
+  assert.equal(manifest.name, appConfig.apps.theming.productName);
+  // relative to themes/<theme>/core/img/manifest.json: the site root, and files that exist in the theme folder
+  assert.equal(manifest.start_url, '../../../');
+  assert.deepEqual(manifest.icons.map((i) => i.src), ['favicon-touch.png', 'favicon-mask.svg']);
+  for (const icon of manifest.icons) assert.ok(readFileSync(join(assets, icon.src)).length > 0, icon.src);
+  // 33 sets --image-logo only for an uploaded logo; the CSS of the server falls back to core/img/logo/logo.svg otherwise
+  const theme = readFileSync(join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'), 'utf8');
+  assert.match(theme, /imagePath\('core', 'logo\/logo\.svg'\)/);
+  assert.match(theme, /\['logo', 'logoheader'\]/);
+  assert.match(theme, /hasImage\(\$key\)/);
+  assert.match(theme, /\$variables\["--image-\$key"\]/);
 });

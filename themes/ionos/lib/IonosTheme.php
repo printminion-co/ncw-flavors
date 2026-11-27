@@ -122,7 +122,26 @@ class IonosTheme extends DefaultTheme implements ITheme {
 
 	public function getCSSVariables(): array {
 		$this->primaryColor = self::LIGHT['primary'];
-		return array_merge(parent::getCSSVariables(), self::variables($this->util, self::LIGHT, self::DARK));
+		return array_merge(parent::getCSSVariables(), self::variables($this->util, self::LIGHT, self::DARK), $this->logoVariables());
+	}
+
+	/**
+	 * The logo of the login page and of the header. On 33 the parent theme sets `--image-logo` and `--image-logoheader`
+	 * only for a logo that an admin uploaded; without a variable the server's CSS falls back to a fixed
+	 * `url(../img/logo/logo.svg)` of core/img, which the theme folder cannot replace. So the variables are set here to
+	 * the theme folder's logo (themes/ionos/core/img/logo/logo.svg) unless an upload exists, which keeps its own variable.
+	 *
+	 * @return array<string, string>
+	 */
+	private function logoVariables(): array {
+		$logo = "url('" . $this->urlGenerator->imagePath('core', 'logo/logo.svg') . "')";
+		$variables = [];
+		foreach (['logo', 'logoheader'] as $key) {
+			if (!$this->imageManager->hasImage($key)) {
+				$variables["--image-$key"] = $logo;
+			}
+		}
+		return $variables;
 	}
 
 	/**
