@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { build, configAsNextcloudSeesIt, hasPhp, makeFlavorsRoot, makeServerTree, readZip, resolveCli, resolveReport, tempDir, text } from './helpers.ts';
 
-const ACME_CLASS = '<?php\nnamespace OCA\\Theming\\Themes;\nclass Acme {}\n';
+const ACME_CLASS = '<?php\nnamespace OC\\Ncw\\Themes;\nclass Acme {}\n';
 
 const ACME_PACKAGE = {
   'themes/acme/lib/Acme.php': ACME_CLASS,
@@ -27,11 +27,11 @@ test('a theme of the flavor: class and assets are in the tree and the config reg
   const { result } = buildF({ 'flavors/f/flavor.yaml': 'themes: [acme]\n', ...ACME_PACKAGE });
   assert.equal(result.status, 0, result.stderr);
   const zip = readZip(result.stdout.trim());
-  assert.equal(text(zip, 'apps/theming/lib/Themes/Acme.php'), ACME_CLASS);
+  assert.equal(text(zip, 'lib/private/Ncw/Themes/Acme.php'), ACME_CLASS);
   assert.equal(text(zip, 'themes/acme/css/acme.css'), 'body { color: red; }\n');
   assert.equal(text(zip, 'themes/acme/img/logo.svg'), '<svg/>\n');
   assert.equal(zip.has('themes/acme/lib/Acme.php'), false);
-  assert.equal(configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'), '{"ncw.themes":["OCA\\\\Theming\\\\Themes\\\\Acme"]}');
+  assert.equal(configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'), '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\Acme"]}');
 });
 
 test('a theme inherited from a base is built like one of the flavor, and the config lists inherited themes first', { skip: !hasPhp && 'php is not installed' }, () => {
@@ -43,12 +43,12 @@ test('a theme inherited from a base is built like one of the flavor, and the con
   });
   assert.equal(result.status, 0, result.stderr);
   const zip = readZip(result.stdout.trim());
-  assert.equal(text(zip, 'apps/theming/lib/Themes/Acme.php'), ACME_CLASS);
-  assert.equal(text(zip, 'apps/theming/lib/Themes/Zeta.php'), '<?php // zeta\n');
+  assert.equal(text(zip, 'lib/private/Ncw/Themes/Acme.php'), ACME_CLASS);
+  assert.equal(text(zip, 'lib/private/Ncw/Themes/Zeta.php'), '<?php // zeta\n');
   assert.equal(text(zip, 'themes/acme/css/acme.css'), 'body { color: red; }\n');
   assert.equal(
     configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'),
-    '{"ncw.themes":["OCA\\\\Theming\\\\Themes\\\\Acme","OCA\\\\Theming\\\\Themes\\\\Zeta"]}',
+    '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\Acme","OC\\\\Ncw\\\\Themes\\\\Zeta"]}',
   );
 });
 
@@ -64,7 +64,7 @@ test('an enforced theme is added to the config as enforce_theme', { skip: !hasPh
   assert.equal(result.status, 0, result.stderr);
   assert.equal(
     configAsNextcloudSeesIt(readZip(result.stdout.trim()), 'config/01-themes.config.php'),
-    '{"ncw.themes":["OCA\\\\Theming\\\\Themes\\\\Acme"],"enforce_theme":"acme"}',
+    '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\Acme"],"enforce_theme":"acme"}',
   );
 });
 
@@ -108,3 +108,29 @@ for (const nested of ['themes/acme/lib/Sub/Inner.php', 'themes/acme/lib/Sub/read
     assert.match(result.stderr, /theme "acme"/);
   });
 }
+
+test('the mail classes of a theme go to the server namespace folder and are not registered as themes', { skip: !hasPhp && 'php is not installed' }, () => {
+  const { result } = buildF({
+    'flavors/f/flavor.yaml': 'themes: [acme]\n',
+    ...ACME_PACKAGE,
+    'themes/acme/mail/AcmeMail.php': '<?php\nnamespace OC\\Ncw\\Mail;\nclass AcmeMail {}\n',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const zip = readZip(result.stdout.trim());
+  assert.equal(text(zip, 'lib/private/Ncw/Mail/AcmeMail.php'), '<?php\nnamespace OC\\Ncw\\Mail;\nclass AcmeMail {}\n');
+  assert.equal(zip.has('themes/acme/mail/AcmeMail.php'), false);
+  assert.equal(configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'), '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\Acme"]}');
+});
+
+test('a theme with a mail class and nothing else registers no theme class', () => {
+  const { result } = buildF({ 'flavors/f/flavor.yaml': 'themes: [mailonly]\n', 'themes/mailonly/mail/M.php': '<?php // m\n' });
+  assert.equal(result.status, 0, result.stderr);
+  const zip = readZip(result.stdout.trim());
+  assert.equal(text(zip, 'lib/private/Ncw/Mail/M.php'), '<?php // m\n');
+});
+
+test('a theme with a file below mail/ is an input error naming it', () => {
+  const { result } = buildF({ 'flavors/f/flavor.yaml': 'themes: [acme]\n', ...ACME_PACKAGE, 'themes/acme/mail/Sub/Inner.php': '<?php\n' });
+  assert.equal(result.status, 2, result.stderr);
+  assert.ok(result.stderr.includes('mail/Sub'), result.stderr);
+});

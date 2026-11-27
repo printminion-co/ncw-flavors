@@ -7,7 +7,7 @@ import { build, makeFlavorsRoot, makeServerTree, readZip, runCli, tempDir } from
 
 const THEME_FLAVORS = {
   'flavors/f/flavor.yaml': 'themes: [acme]\nenforce_theme: acme\napps:\n  files: always\n  dav: always\n  activity: default\n  firstrunwizard: removed\n  workflowengine: removed\n',
-  'themes/acme/lib/Acme.php': '<?php\nnamespace OCA\\Theming\\Themes;\nclass Acme {}\n',
+  'themes/acme/lib/Acme.php': '<?php\nnamespace OC\\Ncw\\Themes;\nclass Acme {}\n',
   'themes/acme/assets/css/acme.css': 'a {}\n',
 };
 
@@ -84,3 +84,31 @@ for (const bad of ['../x', 'a/b', 'UPPER']) {
     assert.ok(result.stderr.includes(bad), result.stderr);
   });
 }
+
+const WITH_MAIL = { ...THEME_FLAVORS, 'themes/acme/mail/AcmeMail.php': '<?php\nnamespace OC\\Ncw\\Mail;\nclass AcmeMail {}\n' };
+
+for (const path of ['lib/private/Ncw/Themes/Acme.php', 'lib/private/Ncw/Mail/AcmeMail.php', 'themes/acme/css/acme.css']) {
+  test(`a file of the theme package that is missing from the artifact is reported (${path})`, () => {
+    const { root, entries } = produced(WITH_MAIL, 'f');
+    entries.delete(path);
+
+    const result = validate(root, 'f', writeZip(entries));
+    assert.equal(result.status, 2, result.stderr);
+    assert.match(result.stderr, new RegExp(`missing file ${path.replaceAll('/', '\\/').replaceAll('.', '\\.')} of theme acme`));
+  });
+}
+
+test('a theme file of the artifact with other content than the package is reported', () => {
+  const { root, entries } = produced(WITH_MAIL, 'f');
+  entries.set('lib/private/Ncw/Mail/AcmeMail.php', strToU8('<?php\nclass Tampered {}\n'));
+
+  const result = validate(root, 'f', writeZip(entries));
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /file lib\/private\/Ncw\/Mail\/AcmeMail\.php differs from theme acme/);
+});
+
+test('an artifact with the theme and mail files of the package validates', () => {
+  const { root, entries } = produced(WITH_MAIL, 'f');
+  const result = validate(root, 'f', writeZip(entries));
+  assert.equal(result.status, 0, result.stderr);
+});

@@ -11,6 +11,7 @@ import { assertValidFlavor, resolveFlavor, type ResolvedFlavor } from './resolve
 import { loadTree, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, isPlainObject } from './util.ts';
 import { generatedConfigs } from './generated.ts';
+import { checkThemeFiles } from './themes.ts';
 
 /** Files of upstream's `config/` directory that stay in the artifact. */
 const UPSTREAM_CONFIG_FILES: readonly string[] = ['config.sample.php', '.htaccess'];
@@ -167,6 +168,7 @@ export function validateArtifact(flavorsRoot: string, flavorName: string, artifa
   const { warnings, present } = checkApps(files, flavor, kind, violations);
   checkShippedLists(files, flavor, present, violations);
   checkConfigureScript(files, flavor, violations);
+  checkThemeFiles(files, flavor, flavorsRoot, violations);
   checkForbidden(files, flavor, violations);
   checkVersionFiles(files, versionJson, violations);
 
