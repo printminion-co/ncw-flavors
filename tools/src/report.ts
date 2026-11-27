@@ -15,6 +15,7 @@ export function formatResolvedFlavor(flavor: ResolvedFlavor, flavorsRoot: string
     app_folders: flavor.appFolders,
     themes: flavor.themes,
     enforce_theme: flavor.enforceTheme,
+    enable_after_install: flavor.enableAfterInstall,
     config_files: sortedObject([...flavor.configs].map(([file, source]): [string, string] => [file, relativeSource(source)])),
     env: [...flavor.env.values()].sort((a, b) => compareStrings(a.name, b.name)),
   });

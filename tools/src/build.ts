@@ -9,6 +9,7 @@ import type { BuildKind } from './kind.ts';
 import { assertAppsCompatible } from './compat.ts';
 import { renderMetadata, validateMetadataInputs, type MetadataInputs, type RawMetadataOptions } from './metadata.ts';
 import { assembleAppConfig, type AppConfig } from './appconfig.ts';
+import { CONFIGURE_SCRIPT, renderConfigureScript } from './configure.ts';
 import { checkConfigs, checkEnvironment } from './configrules.ts';
 import { assertServerTree, deleteWhere, loadServerTree, readShippedLists, writeText, type Files, type ShippedLists, type Tree } from './tree.ts';
 import { compareStrings, renderJson } from './util.ts';
@@ -132,11 +133,12 @@ function addPartialConfigs(tree: Tree, flavor: ResolvedFlavor): void {
   for (const [file, source] of flavor.configs) tree.set(`config/${file}`, new Uint8Array(readFileSync(source)));
 }
 
-/** The files the deployment reads: the app-config template, the settings the import cannot set, the removed apps. */
-function writeDeploymentFiles(tree: Tree, appConfig: AppConfig, removed: string[]): void {
+/** The files the deployment reads: the app-config template, the settings the import cannot set, the removed apps, and the script that applies them. */
+function writeDeploymentFiles(tree: Tree, appConfig: AppConfig, removed: string[], script: string): void {
   writeText(tree, 'app-config.json', renderJson({ apps: appConfig.apps }, 2));
   writeText(tree, 'app-config-special.json', renderJson(appConfig.special, 2));
   writeText(tree, 'removed-apps.json', renderJson(removed, 2));
+  writeText(tree, CONFIGURE_SCRIPT, script);
 }
 
 /** A fixed timestamp (the earliest a zip can store), so the clock never leaks into an artifact. */
@@ -180,6 +182,7 @@ function validate(raw: RawBuildOptions): ValidatedBuild {
   checkThemes(flavor, options.flavorsRoot);
   const configCheck = checkConfigs(flavor, options.flavorsRoot);
   const appConfig = assembleAppConfig(flavor, options.flavorsRoot);
+  renderConfigureScript(flavor); // fails early on a declaration it cannot render
   const warnings = [...configCheck.warnings, ...checkEnvironment(flavor, new Map([...appConfig.envReferences, ...configCheck.envReferences]))];
   try {
     const { files, release } = loadServerTree(options.tree);
@@ -209,7 +212,7 @@ function assemble(validated: ValidatedBuild): Tree {
   const { options, flavor, files: tree } = validated;
   for (const [id, mode] of flavor.apps) if (mode === 'removed') pruneApp(tree, flavor, id);
   writeText(tree, 'core/shipped.json', renderJson(validated.shippedLists, 4));
-  writeDeploymentFiles(tree, validated.appConfig, validated.removed);
+  writeDeploymentFiles(tree, validated.appConfig, validated.removed, renderConfigureScript(flavor));
   activateAppFolders(tree, flavor);
   addPartialConfigs(tree, flavor);
   applyThemes(tree, flavor, options.flavorsRoot);

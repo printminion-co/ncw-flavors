@@ -26,6 +26,8 @@ export interface ResolvedFlavor {
   themes: string[];
   /** The theme the flavor enforces, if any; the last declaration wins. */
   enforceTheme?: string;
+  /** Apps (mode `available`) that `ncw-configure.sh` enables after the install, in the order they were first declared. */
+  enableAfterInstall: string[];
   /** Environment variables by name; a later declaration replaces an earlier one. */
   env: Map<string, EnvDeclaration>;
   /** Partial config files by file name, mapped to their source path; a later declaration replaces an earlier one. */
@@ -41,6 +43,7 @@ interface Manifest {
   appFolders: string[];
   themes: string[];
   enforceTheme?: string;
+  enableAfterInstall: string[];
   env: EnvDeclaration[];
   apps: Record<string, Mode>;
   /** Partial config files by file name, mapped to their source path. */
@@ -49,6 +52,8 @@ interface Manifest {
 
 /** The folder of the flavors root that holds manifests of a kind. */
 const folderOf = (kind: ManifestKind): string => (kind === 'flavor' ? 'flavors' : 'bases');
+
+const APP_ID = /^[a-z][a-z0-9_]*$/;
 
 const FLAVOR_NAME = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
@@ -108,7 +113,7 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
   } catch (error) {
     throw new InputError(`${path} is not valid YAML: ${error instanceof Error ? error.message : String(error)}`);
   }
-  const fields = document as { extends?: unknown; app_dirs?: unknown; themes?: unknown; enforce_theme?: unknown; env?: unknown; apps?: unknown };
+  const fields = document as { extends?: unknown; app_dirs?: unknown; themes?: unknown; enforce_theme?: unknown; enable_after_install?: unknown; env?: unknown; apps?: unknown };
 
   const apps: Record<string, Mode> = {};
   for (const [id, mode] of Object.entries((fields.apps ?? {}) as Record<string, unknown>)) {
@@ -133,10 +138,29 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
     extends: parsePlainNames(path, 'base name', parseNames(path, 'extends', fields.extends)),
     appFolders: parseNames(path, 'app_dirs', fields.app_dirs),
     themes: parsePlainNames(path, 'theme name', parseNames(path, 'themes', fields.themes)),
+    enableAfterInstall: parseNames(path, 'enable_after_install', fields.enable_after_install).map((id) => {
+      if (!APP_ID.test(id)) throw new InputError(`${path}: enable_after_install: "${id}" is not an app id (lowercase letters, digits and underscores)`);
+      return id;
+    }),
     env: parseEnv(path, fields.env),
     apps,
     configs,
   };
+}
+
+/**
+ * An app the script enables after the install must be `available`: an `always` or `default` app is enabled by
+ * the installer already (core/shipped.json), and a removed or unknown app cannot be enabled at all.
+ */
+function assertEnableAfterInstall(flavor: ResolvedFlavor): void {
+  for (const id of flavor.enableAfterInstall) {
+    const mode = flavor.apps.get(id);
+    if (mode === undefined) throw new InputError(`enable_after_install: app ${id} is not in the flavor ${flavor.name} (it needs the mode available)`);
+    if (mode === 'removed') throw new InputError(`enable_after_install: app ${id} has mode removed in flavor ${flavor.name} (it needs the mode available)`);
+    if (mode !== 'available') {
+      throw new InputError(`enable_after_install: app ${id} has mode ${mode} in flavor ${flavor.name}: it is already enabled by the installer (core/shipped.json), so remove it from enable_after_install, or make it available`);
+    }
+  }
 }
 
 /**
@@ -146,13 +170,14 @@ function loadManifest(flavorsRoot: string, kind: ManifestKind, name: string, ext
  */
 export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor {
   const resolved: ResolvedFlavor = {
-    name, order: [], apps: new Map(), appFolders: [], themes: [], env: new Map(), configs: new Map(), dirs: [],
+    name, order: [], apps: new Map(), appFolders: [], themes: [], enableAfterInstall: [], env: new Map(), configs: new Map(), dirs: [],
   };
 
   const mergeIntoResolved = (manifest: Manifest): void => {
     for (const [id, mode] of Object.entries(manifest.apps)) resolved.apps.set(id, mode);
     for (const folder of manifest.appFolders) if (!resolved.appFolders.includes(folder)) resolved.appFolders.push(folder);
     for (const theme of manifest.themes) if (!resolved.themes.includes(theme)) resolved.themes.push(theme);
+    for (const id of manifest.enableAfterInstall) if (!resolved.enableAfterInstall.includes(id)) resolved.enableAfterInstall.push(id);
     if (manifest.enforceTheme !== undefined) resolved.enforceTheme = manifest.enforceTheme;
     for (const declaration of manifest.env) resolved.env.set(declaration.name, declaration);
     for (const [file, source] of Object.entries(manifest.configs)) resolved.configs.set(file, source);
@@ -172,5 +197,6 @@ export function resolveFlavor(flavorsRoot: string, name: string): ResolvedFlavor
   };
 
   resolveManifest('flavor', name, []);
+  assertEnableAfterInstall(resolved);
   return resolved;
 }

@@ -200,6 +200,7 @@ export interface ResolvedReport {
   app_folders: string[];
   themes: string[];
   enforce_theme?: string;
+  enable_after_install: string[];
   config_files: Record<string, string>;
   env: { name: string; required: boolean; default?: string }[];
 }

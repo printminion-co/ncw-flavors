@@ -9,6 +9,7 @@ test('resolve prints the flavor with its apps, app folders, themes, config files
     apps: { activity: 'default', dav: 'always', demo: 'always', files: 'always', firstrunwizard: 'removed', workflowengine: 'removed' },
     app_folders: ['apps-flavor1'],
     themes: [],
+    enable_after_install: [],
     config_files: {
       '10-core.config.php': 'bases/common/config/10-core.config.php',
       '50-flavor.config.php': 'flavors/flavor1/config/50-flavor.config.php',

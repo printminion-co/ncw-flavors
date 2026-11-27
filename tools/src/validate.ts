@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { unzipSync } from 'fflate';
 import { discoverApps } from './apps.ts';
 import { BUILD_NUMBER_SNIPPET } from './versionfile.ts';
+import { CONFIGURE_SCRIPT, renderConfigureScript } from './configure.ts';
 import { configNumber } from './configrules.ts';
 import { isDevFile } from './devfiles.ts';
 import { InputError } from './errors.ts';
@@ -107,6 +108,13 @@ function checkShippedLists(files: Files, flavor: ResolvedFlavor, present: Map<st
   }
 }
 
+/** The deployment script must be there and be exactly the one generated for the flavor. */
+function checkConfigureScript(files: Files, flavor: ResolvedFlavor, violations: string[]): void {
+  const actual = decode(files, CONFIGURE_SCRIPT);
+  if (actual === undefined) return void violations.push(`missing ${CONFIGURE_SCRIPT}`);
+  if (actual !== renderConfigureScript(flavor)) violations.push(`${CONFIGURE_SCRIPT} is not the script generated for flavor ${flavor.name}`);
+}
+
 function checkForbidden(files: Files, flavor: ResolvedFlavor, violations: string[]): void {
   for (const path of [...files.keys()].sort(compareStrings)) {
     if (isDevFile(path, flavor.appFolders)) violations.push(`forbidden entry ${path}`);
@@ -158,6 +166,7 @@ export function validateArtifact(flavorsRoot: string, flavorName: string, artifa
   const kind = versionJson?.kind === 'dev' || versionJson?.kind === 'release' ? versionJson.kind : undefined;
   const { warnings, present } = checkApps(files, flavor, kind, violations);
   checkShippedLists(files, flavor, present, violations);
+  checkConfigureScript(files, flavor, violations);
   checkForbidden(files, flavor, violations);
   checkVersionFiles(files, versionJson, violations);
 
