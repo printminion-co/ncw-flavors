@@ -14,6 +14,8 @@ DRY=0
 LIVE_LINE=""
 DEV_BRANCH=""
 SIGNED_RULESET="ncw-signed-commits"
+SNAPSHOT_BRANCH_RULESET="ncw-snapshot-branches"
+SNAPSHOT_TAG_RULESET="ncw-snapshot-tags"
 MIRROR_RULESET="ncw-pristine-mirrors"
 
 usage() {
@@ -98,15 +100,18 @@ load_rulesets() {
   RULESETS="$acc"
 }
 
-# covers PATTERN RULE...: succeed when an active ruleset targets PATTERN with all RULEs.
-covers() {
-  local pat="$1"; shift
+# covers_target TARGET PATTERN RULE...: succeed when an active ruleset of TARGET (branch or tag) includes PATTERN
+# with all RULEs.
+covers_target() {
+  local target="$1" pat="$2"; shift 2
   local rules; rules=$(printf '%s\n' "$@" | jq -R . | jq -s .)
-  printf '%s' "$RULESETS" | jq -e --arg p "$pat" --argjson r "$rules" '
-    any(.[]; .enforcement=="active" and .target=="branch"
+  printf '%s' "$RULESETS" | jq -e --arg p "$pat" --arg t "$target" --argjson r "$rules" '
+    any(.[]; .enforcement=="active" and .target==$t
       and ((.conditions.ref_name.include // []) | any(.==$p))
       and ((.rules // [] | map(.type)) as $t | all($r[]; . as $x | $t | any(.==$x))))' >/dev/null
 }
+# covers PATTERN RULE...: the same for a branch ruleset.
+covers() { local pat="$1"; shift; covers_target branch "$pat" "$@"; }
 ruleset_id() { printf '%s' "$RULESETS" | jq -r --arg n "$1" '[.[]|select(.name==$n)|.id][0] // empty'; }
 
 pick_dev_branch() {
@@ -119,7 +124,7 @@ pick_dev_branch() {
 }
 
 # ---------------------------------------------------------------- settings
-IDS=(default_branch signed_commits pristine_mirrors token_permissions fork_pr_approval signing_keys upstream_workflows sync_token)
+IDS=(default_branch signed_commits pristine_mirrors token_permissions fork_pr_approval signing_keys upstream_workflows sync_token snapshot_refs)
 
 title_default_branch()    { echo "Default branch is the live line's dev branch (ionos-dev-v<nn>)"; }
 title_signed_commits()    { echo "Signed commits required on ionos-dev-v* and rc/*"; }
@@ -129,6 +134,7 @@ title_fork_pr_approval()  { echo "Fork pull request workflows need approval from
 title_signing_keys()      { echo "Every developer has a signing key on GitHub"; }
 title_upstream_workflows(){ echo "Upstream's workflows stay disabled"; }
 title_sync_token()        { echo "Repository secret IONOS_SYNC_TOKEN exists (token with workflow scope)"; }
+title_snapshot_refs()     { echo "Snapshots never rewritten: rc/* branches and ncw-v* tags protected from force push and deletion"; }
 
 chk_default_branch() {
   load_repo || { set_state UNKNOWN "cannot read the repository: $OUT"; return; }
@@ -315,6 +321,34 @@ app_sync_token() {
   PLAN_DESC="Create the secret IONOS_SYNC_TOKEN. First, by hand, create a fine-grained personal access token at https://github.com/settings/personal-access-tokens/new limited to $REPO with these repository permissions, read and write, and no more: Contents, Workflows, Pull requests, Issues, Actions. Then the command below prompts you for the token value; this script never reads, shows or stores it."
   plan_add "" gh secret set IONOS_SYNC_TOKEN --repo "$REPO"
   PLAN_INTERACTIVE=1
+}
+
+chk_snapshot_refs() {
+  load_rulesets
+  [ -z "$RULESETS_ERR" ] || { set_state UNKNOWN "cannot read rulesets (needs admin): $RULESETS_ERR"; return; }
+  local missing=()
+  covers_target branch 'refs/heads/rc/*' non_fast_forward deletion || missing+=('refs/heads/rc/*')
+  covers_target tag 'refs/tags/ncw-v*' non_fast_forward deletion || missing+=('refs/tags/ncw-v*')
+  if [ ${#missing[@]} -eq 0 ]; then
+    set_state PASS "active rulesets block force push and deletion on rc/* branches and ncw-v* tags"
+  else
+    set_state TODO "no active ruleset blocking force push and deletion for: ${missing[*]}" \
+      "A snapshot branch and its tag must never be moved or deleted (spec 01, Releases). Creating them stays allowed. Rehearsal refs (rehearsal/*, rehearsal-v*) are not covered on purpose."
+    fix "Settings > Rules > Rulesets: https://github.com/$REPO/settings/rules"
+  fi
+}
+app_snapshot_refs() {
+  plan_reset
+  local bbody tbody id
+  bbody='{"name":"'"$SNAPSHOT_BRANCH_RULESET"'","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/rc/*"],"exclude":[]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}'
+  tbody='{"name":"'"$SNAPSHOT_TAG_RULESET"'","target":"tag","enforcement":"active","conditions":{"ref_name":{"include":["refs/tags/ncw-v*"],"exclude":[]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}'
+  PLAN_DESC="Create the rulesets '$SNAPSHOT_BRANCH_RULESET' (rc/* branches) and '$SNAPSHOT_TAG_RULESET' (ncw-v* tags): no force push and no deletion. Creating a ref stays allowed, so the snapshot workflow still works; a wrong snapshot can then only be superseded by a new release number. Rehearsal refs are not covered."
+  id=$(ruleset_id "$SNAPSHOT_BRANCH_RULESET")
+  if [ -n "$id" ]; then plan_add "$bbody" gh api -X PUT "repos/$REPO/rulesets/$id" --input -
+  else plan_add "$bbody" gh api -X POST "repos/$REPO/rulesets" --input -; fi
+  id=$(ruleset_id "$SNAPSHOT_TAG_RULESET")
+  if [ -n "$id" ]; then plan_add "$tbody" gh api -X PUT "repos/$REPO/rulesets/$id" --input -
+  else plan_add "$tbody" gh api -X POST "repos/$REPO/rulesets" --input -; fi
 }
 
 # ---------------------------------------------------------------- output

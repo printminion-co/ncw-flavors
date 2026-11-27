@@ -56,9 +56,11 @@ fixtures() { # dir mode: pass | todo
         {"sha":"cccccccc3333","author":{"login":"up"},"commit":{"message":"fix: upstream","author":{"name":"U"},"verification":{"verified":false,"reason":"unsigned"}}}]' \
         > "$d/repos_o_r_commits_sha_ionos-dev-v33_per_page_100.json"
   if [ "$m" = pass ]; then
-    echo '[{"id":1},{"id":2}]' > "$d/repos_o_r_rulesets.json"
+    echo '[{"id":1},{"id":2},{"id":3},{"id":4}]' > "$d/repos_o_r_rulesets.json"
     echo '{"id":1,"name":"s","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/ionos-dev-v*","refs/heads/rc/*"]}},"rules":[{"type":"required_signatures"}]}' > "$d/repos_o_r_rulesets_1.json"
     echo '{"id":2,"name":"m","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/master","refs/heads/stable*"]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}' > "$d/repos_o_r_rulesets_2.json"
+    echo '{"id":3,"name":"b","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/rc/*"]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}' > "$d/repos_o_r_rulesets_3.json"
+    echo '{"id":4,"name":"t","target":"tag","enforcement":"active","conditions":{"ref_name":{"include":["refs/tags/ncw-v*"]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}' > "$d/repos_o_r_rulesets_4.json"
     echo '{"default_workflow_permissions":"write","can_approve_pull_request_reviews":true}' > "$d/repos_o_r_actions_permissions_workflow.json"
     echo '{"approval_policy":"all_external_contributors"}' > "$d/repos_o_r_actions_permissions_fork-pr-contributor-approval.json"
     echo '{"name":"IONOS_SYNC_TOKEN"}' > "$d/repos_o_r_actions_secrets_IONOS_SYNC_TOKEN.json"
@@ -85,7 +87,7 @@ if command -v shellcheck >/dev/null; then shellcheck "$WIZ" "$0"; expect "shellc
 fixtures "$TMP/pass" pass
 out=$(run "$TMP/pass" --check --live-line 33); rc=$?
 expect "all set: exit 0" $((rc))
-echo "$out" | grep -q 'PASS=7 TODO=0 WAITING=0 UNKNOWN=1'; expect "all set: summary" $?
+echo "$out" | grep -q 'PASS=8 TODO=0 WAITING=0 UNKNOWN=1'; expect "all set: summary" $?
 echo "$out" | grep -q 'bob .*verified=false'; expect "signing evidence lists unverified commit" $?
 echo "$out" | absent 'upstream' /dev/stdin; expect "signing evidence skips non-IONOS commits" $?
 [ "$(writes "$TMP/pass")" = 0 ]; expect "--check never writes" $?
@@ -100,6 +102,28 @@ echo "$out" | grep -q 'TODO   \] 7\.'; expect "todo: upstream workflow TODO" $?
 echo "$out" | grep -q 'TODO   \] 8\.'; expect "todo: missing sync token secret is TODO" $?
 out=$(run "$TMP/todo" --check --live-line 33)
 echo "$out" | grep -q 'TODO   \] 1\.'; expect "live line given: default branch TODO" $?
+
+echo "$out" | grep -q 'TODO   \] 9\.'; expect "todo: snapshot refs TODO" $?
+
+# 2b. never rewritten: branch rc/* and tag ncw-v* each need their own ruleset (the target is per ruleset)
+out=$(run "$TMP/pass" --check --live-line 33)
+echo "$out" | grep -q 'PASS   \] 9\.'; expect "snapshot refs: PASS" $?
+fixtures "$TMP/notag" pass; rm "$TMP/notag/repos_o_r_rulesets_4.json"
+out=$(run "$TMP/notag" --check --live-line 33)
+echo "$out" | grep -q 'TODO   \] 9\..*' ; expect "no tag ruleset: TODO" $?
+echo "$out" | grep -q 'refs/tags/ncw-v\*'; expect "no tag ruleset: names the tag pattern" $?
+fixtures "$TMP/tagasbranch" pass
+echo '{"id":4,"name":"t","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/tags/ncw-v*"]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}' > "$TMP/tagasbranch/repos_o_r_rulesets_4.json"
+out=$(run "$TMP/tagasbranch" --check --live-line 33)
+echo "$out" | grep -q 'TODO   \] 9\.'; expect "tag pattern in a branch-target ruleset does not count" $?
+fixtures "$TMP/nodel" pass
+echo '{"id":3,"name":"b","target":"branch","enforcement":"active","conditions":{"ref_name":{"include":["refs/heads/rc/*"]}},"rules":[{"type":"non_fast_forward"}]}' > "$TMP/nodel/repos_o_r_rulesets_3.json"
+out=$(run "$TMP/nodel" --check --live-line 33)
+echo "$out" | grep -q 'TODO   \] 9\.'; expect "rc/* without the deletion rule: TODO" $?
+fixtures "$TMP/disabled" pass
+echo '{"id":3,"name":"b","target":"branch","enforcement":"evaluate","conditions":{"ref_name":{"include":["refs/heads/rc/*"]}},"rules":[{"type":"non_fast_forward"},{"type":"deletion"}]}' > "$TMP/disabled/repos_o_r_rulesets_3.json"
+out=$(run "$TMP/disabled" --check --live-line 33)
+echo "$out" | grep -q 'TODO   \] 9\.'; expect "inactive ruleset does not count" $?
 
 # 3. WAITING alone does not fail: make everything pass except the default branch
 fixtures "$TMP/wait" pass; echo '{"default_branch":"master","permissions":{"admin":true}}' > "$TMP/wait/repos_o_r.json"
@@ -138,14 +162,16 @@ echo "$out" | grep -q 'Command: .*rulesets'; expect "dry-run: prints the ruleset
 echo "$out" | grep -q 'fork-pr-contributor-approval'; expect "dry-run: prints approval command" $?
 echo "$out" | grep -q 'gh secret set IONOS_SYNC_TOKEN --repo o/r'; expect "dry-run: prints the secret command" $?
 echo "$out" | grep -q 'Workflows'; expect "dry-run: prints the token steps" $?
+echo "$out" | grep -q '"target":"tag".*refs/tags/ncw-v\*'; expect "dry-run: prints the tag ruleset body" $?
+echo "$out" | grep -q 'ncw-snapshot-branches'; expect "dry-run: prints the branch ruleset" $?
 
 # 6. y/n flow: order is signed(y) mirrors(n) token(y) approval(n) upstream(y)
 : > "$TMP/todo/calls.log"
 # with --live-line the default branch step comes first: answer it n
-printf 'n\ny\nn\ny\nn\ny\ny\n' | run "$TMP/todo" --apply --live-line 33 >/dev/null
+printf 'n\ny\nn\ny\nn\ny\ny\ny\n' | run "$TMP/todo" --apply --live-line 33 >/dev/null
 l="$TMP/todo/calls.log"
 grep -q 'WRITE.*rulesets.*required_signatures' "$l"; expect "y: signed ruleset POST" $?
-absent 'WRITE.*non_fast_forward' "$l"; expect "n: mirror ruleset not created" $?
+absent 'WRITE.*ncw-pristine-mirrors' "$l"; expect "n: mirror ruleset not created" $?
 grep -q 'WRITE.*actions/permissions/workflow.*default_workflow_permissions=write' "$l"; expect "y: token permissions PUT" $?
 absent 'WRITE.*fork-pr-contributor-approval' "$l"; expect "n: approval not changed" $?
 grep -q 'WRITE.*actions/workflows/10/disable' "$l"; expect "y: upstream workflow 10 disabled" $?
@@ -153,9 +179,11 @@ absent 'workflows/9/disable' "$l"; expect "ionos-* workflow left alone" $?
 absent 'default_branch=' "$l"; expect "n: default branch not switched" $?
 grep -qx 'WRITE secret set IONOS_SYNC_TOKEN --repo o/r' "$l"; expect "y: gh secret set is run, with no value on the command line" $?
 absent 'WRITE.*can_approve' "$l"; expect "token permissions do not touch can_approve_pull_request_reviews" $?
-[ "$(writes "$TMP/todo")" = 4 ]; expect "exactly 4 writes" $?
+grep -q 'WRITE.*rulesets.*"include":\["refs/heads/rc/\*"\].*non_fast_forward.*deletion' "$l"; expect "y: rc/* ruleset POST (no force push, no deletion)" $?
+grep -q 'WRITE.*rulesets.*"target":"tag".*"include":\["refs/tags/ncw-v\*"\].*non_fast_forward.*deletion' "$l"; expect "y: ncw-v* tag ruleset POST" $?
+[ "$(writes "$TMP/todo")" = 6 ]; expect "exactly 6 writes" $?
 : > "$l"
-printf 'n\nn\nn\nn\nn\nn\nn\n' | run "$TMP/todo" --apply --live-line 33 >/dev/null
+printf 'n\nn\nn\nn\nn\nn\nn\nn\n' | run "$TMP/todo" --apply --live-line 33 >/dev/null
 [ "$(writes "$TMP/todo")" = 0 ]; expect "n: the secret is not set" $?
 
 # 7. EOF on stdin counts as no

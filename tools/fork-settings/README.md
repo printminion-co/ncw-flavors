@@ -81,5 +81,14 @@ dry run); it touches nothing on GitHub.
    2. `gh secret set` prompts you for the value. The wizard never reads, echoes, logs or stores it; with
       `--dry-run` it only prints the command.
 
+9. **Snapshots are never rewritten.** Two more rulesets, because a ruleset has one target (branch or tag):
+   `ncw-snapshot-branches` on `refs/heads/rc/*` and `ncw-snapshot-tags` on `refs/tags/ncw-v*`, each with
+   `non_fast_forward` and `deletion`. Creating such a ref stays allowed (the snapshot workflow creates them); changing
+   or deleting one is refused for everybody, so a release can always be rebuilt from its snapshot. The signed-commits
+   rule (item 2) stays as it is. Rehearsal refs (`rehearsal/*` branches, `rehearsal-v*` tags) are not covered, so a
+   person can delete them. A mistaken snapshot is superseded by a new release number; if one really must go, an
+   admin disables the ruleset for the moment and enables it again. The check is PASS when both rulesets are active
+   and have both rules; the apply step posts (or updates, when the name exists) both after one y/n.
+
 Not covered: branch deletion of merged branches, merge-method settings and other repository options the design
 does not mention.
