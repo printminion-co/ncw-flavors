@@ -1,0 +1,11 @@
+/*
+ * Per-app override: public share pages, the pattern for any further app: one file per app in this folder
+ * (PLACEHOLDER styling, uses only the theme's CSS variables).
+ */
+&#body-public {
+	font-family: var(--font-face);
+
+	#header {
+		min-height: var(--header-height);
+	}
+}

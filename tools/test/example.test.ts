@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parse } from 'yaml';
-import { readFileSync } from 'node:fs';
+import { cpSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { REPO_ROOT, resolveReport } from './helpers.ts';
+import { REPO_ROOT, build, configAsNextcloudSeesIt, hasPhp, makeFlavorsRoot, makeServerTree, readZip, resolveReport, runCli, tempDir, text } from './helpers.ts';
 
 // These tests read the real flavors committed on this branch, on purpose: they are the only ones that do.
 
@@ -46,4 +46,52 @@ test('the real base upstream-33 lists exactly the 53 apps of the official 33.0.9
   assert.deepEqual(Object.keys(manifest.apps).sort(), [...OFFICIAL_53].sort());
   assert.deepEqual(manifest.app_dirs, ['apps-upstream']);
   for (const mode of Object.values(manifest.apps)) assert.ok(['always', 'default', 'available', 'removed'].includes(mode));
+});
+
+test('the real flavor1 inherits the IONOS theme from the base common and enforces it', () => {
+  const report = resolveReport(REPO_ROOT, 'flavor1');
+  assert.deepEqual(report.themes, ['ionos']);
+  assert.equal(report.enforce_theme, 'ionos');
+  assert.deepEqual(Object.keys(report.config_files), [
+    '10-core.config.php', '11-theme.config.php', '50-flavor.config.php',
+  ]);
+  const manifest = parse(readFileSync(join(REPO_ROOT, 'bases/common/flavor.yaml'), 'utf8')) as { themes: string[]; enforce_theme: string };
+  assert.deepEqual(manifest.themes, ['ionos']);
+  assert.equal(manifest.enforce_theme, 'ionos');
+  // not in the base that only classifies apps
+  assert.equal('themes' in (parse(readFileSync(join(REPO_ROOT, 'bases/upstream-33/flavor.yaml'), 'utf8')) as object), false);
+});
+
+test('the real base config activates the theme folder and the mail template class', { skip: !hasPhp && 'php is not installed' }, () => {
+  const root = makeFlavorsRoot({ 'flavors/f/flavor.yaml': 'extends: [common]\n' });
+  cpSync(join(REPO_ROOT, 'bases/common'), join(root, 'bases/common'), { recursive: true });
+  cpSync(join(REPO_ROOT, 'themes'), join(root, 'themes'), { recursive: true });
+  const result = build({ flavorsRoot: root, flavor: 'f', tree: makeServerTree(), out: tempDir('out') });
+  assert.equal(result.status, 0, result.stderr);
+  const zip = readZip(result.stdout.trim());
+  assert.equal(configAsNextcloudSeesIt(zip, 'config/11-theme.config.php'), '{"theme":"ionos"}');
+  assert.equal(
+    configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'),
+    '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\IonosDarkTheme","OC\\\\Ncw\\\\Themes\\\\IonosTheme"],"enforce_theme":"ionos"}',
+  );
+  // the classes the config names are at the path the server's PSR-4 autoloader for OC\ looks them up, and declare that class
+  for (const fqcn of ['OC\\Ncw\\Themes\\IonosTheme', 'OC\\Ncw\\Themes\\IonosDarkTheme']) {
+    const source = text(zip, `lib/private/${fqcn.slice('OC\\'.length).replaceAll('\\', '/')}.php`);
+    const declared = `${/^namespace (.+);$/m.exec(source)?.[1]}\\${/^class (\w+)/m.exec(source)?.[1]}`;
+    assert.equal(declared, fqcn);
+  }
+  assert.ok(zip.has('themes/ionos/fonts/OpenSans-Variable.ttf'));
+  assert.ok(zip.has('themes/ionos/fonts/OFL.txt'));
+  assert.equal(runCli(['validate', '--flavors', root, '--flavor', 'f', '--artifact', result.stdout.trim()]).status, 0);
+});
+
+test('the brand values of the IONOS theme are in IonosTheme.php only: the CSS holds no color', () => {
+  const hex = /#[0-9a-fA-F]{3,8}\b/;
+  const cssFolder = join(REPO_ROOT, 'themes/ionos/assets/css');
+  const cssFiles = readdirSync(cssFolder);
+  assert.ok(cssFiles.length >= 3, 'the per-app overrides: login, files and one more');
+  for (const file of cssFiles) assert.equal(hex.test(readFileSync(join(cssFolder, file), 'utf8')), false, file);
+  const theme = readFileSync(join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'), 'utf8');
+  assert.match(theme, /BRAND VALUES ARE IN ONE PLACE/);
+  for (const line of theme.split('\n').filter((l) => hex.test(l))) assert.match(line, /PLACEHOLDER/, line);
 });

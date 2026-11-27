@@ -1,0 +1,13 @@
+/*
+ * Per-app override: the Files app (PLACEHOLDER styling, uses only the theme's CSS variables).
+ */
+.app-files {
+	.files-list__header,
+	.app-navigation {
+		border-color: var(--color-border);
+	}
+
+	.files-list__row:hover {
+		background-color: var(--color-background-hover);
+	}
+}

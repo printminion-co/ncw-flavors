@@ -1,0 +1,18 @@
+/*
+ * Per-app override: the login page (PLACEHOLDER styling, uses only the theme's CSS variables).
+ * The server nests this file in [data-theme-ionos], which is the body, so `&` is the body.
+ */
+&#body-login {
+	font-family: var(--font-face);
+
+	.login-form,
+	.guest-box {
+		border-radius: var(--border-radius-container-large);
+		border: 1px solid var(--color-border);
+	}
+
+	.login-form .button-vue--primary,
+	.guest-box .button-vue--primary {
+		min-height: var(--default-clickable-area);
+	}
+}

@@ -3,3 +3,7 @@ apps:
   dav: always
   workflowengine: removed
   firstrunwizard: removed
+# The shared base carries the default brand theme: the IONOS theme (themes/ionos/), registered and enforced.
+# The tool generates config/01-themes.config.php (ncw.themes, enforce_theme) from these two lines.
+themes: [ionos]
+enforce_theme: ionos

@@ -1,0 +1,12 @@
+Open Sans
+
+Open Sans is a typeface designed by Steve Matteson. Copyright 2020 The Open Sans Project Authors
+(https://github.com/googlefonts/opensans). It is licensed under the SIL Open Font License, Version 1.1
+(OFL.txt in this folder, also at https://openfontlicense.org). The font has no Reserved Font Name.
+
+Source: https://github.com/googlefonts/opensans, file fonts/variable/OpenSans[wdth,wght].ttf at commit
+6cbc400d4855abee59d85c4ed871d510399bce7b, copied unmodified and renamed to OpenSans-Variable.ttf so the file name
+has no brackets or commas in a URL. FONTLOG.txt is the font's own log, copied from the same commit.
+
+The license applies to the font files only. It does not apply to the rest of this theme, and the font files are not
+sold by themselves.
