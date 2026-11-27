@@ -53,7 +53,7 @@ test('the real flavor1 inherits the IONOS theme from the base common and enforce
   assert.deepEqual(report.themes, ['ionos']);
   assert.equal(report.enforce_theme, 'ionos');
   assert.deepEqual(Object.keys(report.config_files), [
-    '10-core.config.php', '11-theme.config.php', '12-mail.config.php', '50-flavor.config.php',
+    '10-core.config.php', '11-theme.config.php', '12-mail.config.php', '13-clients.config.php', '50-flavor.config.php',
   ]);
   const manifest = parse(readFileSync(join(REPO_ROOT, 'bases/common/flavor.yaml'), 'utf8')) as { themes: string[]; enforce_theme: string };
   assert.deepEqual(manifest.themes, ['ionos']);
@@ -73,10 +73,10 @@ test('the real base config activates the theme folder and the mail template clas
   assert.equal(configAsNextcloudSeesIt(zip, 'config/12-mail.config.php'), '{"mail_template_class":"OC\\\\Ncw\\\\Mail\\\\IonosEMailTemplate"}');
   assert.equal(
     configAsNextcloudSeesIt(zip, 'config/01-themes.config.php'),
-    '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\IonosDarkTheme","OC\\\\Ncw\\\\Themes\\\\IonosTheme"],"enforce_theme":"ionos"}',
+    '{"ncw.themes":["OC\\\\Ncw\\\\Themes\\\\IonosTheme"],"enforce_theme":"ionos"}',
   );
   // the classes the config names are at the path the server's PSR-4 autoloader for OC\ looks them up, and declare that class
-  for (const fqcn of ['OC\\Ncw\\Themes\\IonosTheme', 'OC\\Ncw\\Themes\\IonosDarkTheme', 'OC\\Ncw\\Mail\\IonosEMailTemplate']) {
+  for (const fqcn of ['OC\\Ncw\\Themes\\IonosTheme', 'OC\\Ncw\\Mail\\IonosEMailTemplate']) {
     const source = text(zip, `lib/private/${fqcn.slice('OC\\'.length).replaceAll('\\', '/')}.php`);
     const declared = `${/^namespace (.+);$/m.exec(source)?.[1]}\\${/^class (\w+)/m.exec(source)?.[1]}`;
     assert.equal(declared, fqcn);
@@ -143,4 +143,52 @@ test('the primary color of the instance settings is the primary color of the the
   const light = /public const LIGHT = \[\s*'primary' => '(#[0-9A-Fa-f]{6})'/.exec(readFileSync(join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'), 'utf8'));
   assert.ok(light, 'IonosTheme::LIGHT starts with the primary color');
   assert.equal(settings.primary_color?.toLowerCase(), light[1]?.toLowerCase());
+});
+
+test('the client download links of the real base are placeholders and switch off the iOS smart banner', { skip: !hasPhp && 'php is not installed' }, () => {
+  const config = JSON.parse(configAsNextcloudSeesIt(buildRealCommon(), 'config/13-clients.config.php')) as Record<string, string>;
+  assert.deepEqual(config, {
+    customclient_desktop: 'https://example.invalid/clients/desktop',
+    customclient_ios: 'https://example.invalid/clients/ios',
+    customclient_ios_appid: '',
+    customclient_android: 'https://example.invalid/clients/android',
+    customclient_fdroid: 'https://example.invalid/clients/fdroid',
+  });
+});
+
+/** Every override file of the real theme package: path below assets/ and the decoded translations. */
+function l10nOverrides(): { file: string; translations: Record<string, string> }[] {
+  const assets = join(REPO_ROOT, 'themes/ionos/assets');
+  return readdirSync(assets, { recursive: true, withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.json') && e.parentPath.endsWith('/l10n'))
+    .map((e) => {
+      const path = join(e.parentPath, e.name);
+      return { file: path.slice(assets.length + 1), translations: (JSON.parse(readFileSync(path, 'utf8')) as { translations: Record<string, string> }).translations };
+    });
+}
+
+test('the translation overrides of the real theme are valid and say only the product name where they say Nextcloud', () => {
+  const overrides = l10nOverrides();
+  const files = overrides.map((o) => o.file).sort();
+  // English (the source strings) and German for the strings of the server that can be reached by the theme folder
+  for (const area of ['core', 'lib', 'apps/settings', 'apps/theming']) {
+    for (const lang of ['en', 'de']) assert.ok(files.includes(`${area}/l10n/${lang}.json`), `${area}/l10n/${lang}.json`);
+  }
+  for (const { file, translations } of overrides) {
+    const entries = Object.entries(translations);
+    assert.ok(entries.length > 0, file);
+    for (const [source, target] of entries) {
+      assert.equal(typeof target, 'string', `${file}: ${source}`);
+      assert.ok(target.includes('IONOS Nextcloud Workspace'), `${file}: the target names the product: ${target}`);
+      assert.equal(target.replaceAll('IONOS Nextcloud Workspace', '').toLowerCase().includes('nextcloud'), false, `${file}: ${target}`);
+    }
+  }
+});
+
+test('the translation overrides are copied to the legacy theme folder and nowhere else', () => {
+  const zip = buildRealCommon();
+  for (const path of ['themes/ionos/core/l10n/en.json', 'themes/ionos/core/l10n/de.json', 'themes/ionos/apps/settings/l10n/en.json', 'themes/ionos/lib/l10n/de.json']) {
+    assert.ok(zip.has(path), path);
+  }
+  assert.equal([...zip.keys()].some((p) => p.startsWith('lib/private/Ncw/') && p.endsWith('.json')), false);
 });
