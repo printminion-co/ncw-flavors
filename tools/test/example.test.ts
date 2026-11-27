@@ -10,9 +10,13 @@ import { REPO_ROOT, resolveReport } from './helpers.ts';
 test('the real flavor1 resolves, extends the upstream base and activates both app folders', () => {
   const report = resolveReport(REPO_ROOT, 'flavor1');
   assert.deepEqual(report.app_folders, ['apps-upstream', 'apps-flavor1']);
-  for (const id of ['contacts', 'calendar', 'tasks', 'groupfolders', 'notes']) {
+  for (const id of ['contacts', 'calendar', 'tasks', 'notes']) {
     assert.equal(report.apps[id], 'default', id);
   }
+  // groupfolders cannot be enabled by `occ maintenance:install` (its migration needs the app to be loaded), so the
+  // script enables it after the install
+  assert.equal(report.apps.groupfolders, 'available');
+  assert.deepEqual(report.enable_after_install, ['groupfolders']);
   // common wins over upstream-33
   assert.equal(report.apps.files, 'always');
   assert.equal(report.apps.workflowengine, 'removed');

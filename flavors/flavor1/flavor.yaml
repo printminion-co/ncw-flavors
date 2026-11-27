@@ -10,5 +10,8 @@ apps:
   contacts: default
   calendar: default
   tasks: default
-  groupfolders: default
   notes: default
+  # groupfolders cannot be enabled by `occ maintenance:install`: its migrations need the app loaded, which the installer
+  # does not do. So it is `available` and ncw-configure.sh enables it right after the install.
+  groupfolders: available
+enable_after_install: [groupfolders]
