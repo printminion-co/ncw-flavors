@@ -31,15 +31,49 @@ Asset folders:
 - `assets/core/l10n/<lang>.json`: translation overrides, loaded by the server on top of `core/l10n/<lang>.json`.
 - `assets/core/templates/`: template overrides, loaded instead of the server's `core/templates/`.
 
-## Logo and favicon (not included)
+## Logo and favicon (DUMMY set included)
 
-There is no logo and no favicon asset yet, so the server's default ones are used. They go here:
+The theme ships its own logo set, so no Nextcloud logo is shown. The files are DUMMIES: a generic ring-and-diamond
+mark and a plain bar as the wordmark stand-in, in a neutral gray-blue that matches the placeholder palette. They
+contain no text, no trademark and no brand mark. The logo lives in this theme, not in a flavor: the base `common`
+enforces the theme `ionos` for every flavor (flavor1 included), so every flavor ships these files.
 
-- `assets/core/img/logo.svg` (and `logo.png`), `assets/core/img/logo-icon.svg`: the logo and the one in emails
-- `assets/core/img/favicon.svg`, `favicon.png`, `favicon.ico`, `favicon-touch.png`: the favicons
+The server looks an image up in `themes/<theme>/core/img/<file>` before its own `core/img/<file>`
+(`URLGenerator::imagePath`). On 33 the default logo is `core/img/logo/logo.svg` (not `core/img/logo.svg`). Files, all
+below `assets/core/img/` (so `themes/ionos/core/img/` in the artifact):
 
-The server replaces an image of `core/img/` with the file of the same name in `themes/ionos/core/img/`.
-(`themes/example` in the server tree shows the full set.)
+| File | Size | Where a user sees it |
+|---|---|---|
+| `logo/logo.svg` | 256x128 | `getLogo()`: capabilities (clients), federated sharing settings |
+| `logo/logo.png` | 252x120 | the login page and the header (`--image-logo`, `--image-logoheader`), the logo of every email (`getLogo(false)`) |
+| `favicon.ico` | 32x32 | the browser tab icon (`<link rel="icon">`) |
+| `favicon-touch.png` | 180x180 | `apple-touch-icon`, the `og:image` of the login page |
+| `favicon-fb.png` | 200x200 | the `og:image` preview of a public share |
+| `favicon-mask.svg` | 16x16 | `mask-icon` (Safari pinned tab), one color |
+
+When a theme has a PNG but no SVG of a name, the server uses the PNG; both are shipped. Not shipped on purpose:
+`logo/logo-mail.png`, `logo/logo-icon-175px.png` and `logo/logo-enterprise.*` are not used by any code on 33;
+`favicon.png`, `favicon.svg` and `favicon-touch.svg` are only read by the theming app from `core/img/` directly
+(fallbacks of the routes `/apps/theming/favicon` and `/apps/theming/icon`).
+
+NOT replaceable through the theme folder: the web app manifest (`<link rel="manifest">`, route
+`/apps/theming/manifest/<app>`) and its icons. The theming routes `getTouchIcon` and `getFavicon` use the logo that
+an admin uploads (theming app setting), or generate it from `core/img/logo/logo.svg` of the server tree (hardcoded in
+`Util::getAppIcon`), or fall back to the server's `favicon-touch.png`. The closest mechanisms are the admin logo and
+favicon upload of the theming app, or a static `core/img/manifest.json` in this theme (the server prefers a theme
+file to the route; the icon paths in it are relative to the file).
+
+### Replacing the dummies
+
+Keep the file names and sizes above and drop the real files in `assets/core/img/`. To regenerate the dummies instead
+(for example after changing the shapes or the colors), edit the SVG sources in `logo-src/` (`logo.svg`, `icon.svg`,
+`mask.svg`; they are not part of the artifact) and run `logo-src/generate.sh`: it needs ImageMagick 6 (`convert`)
+and writes all files above, byte for byte the same on every run. `logo.svg` and `mask.svg` are copied as they are,
+the PNGs and the ICO are rendered from the SVGs. `ncw validate` compares every file of `assets/` with the artifact,
+so a changed or missing image is reported.
+
+License of the dummy files: made for this repository, AGPL-3.0-or-later like the rest of it (the SVG sources say so in
+a comment; PNG and ICO cannot carry it).
 
 ## Font license
 

@@ -112,3 +112,44 @@ test('an artifact with the theme and mail files of the package validates', () =>
   const result = validate(root, 'f', writeZip(entries));
   assert.equal(result.status, 0, result.stderr);
 });
+
+const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d49444154789c6360000002000001e221bc330000000049454e44ae426082', 'hex');
+const IMAGE = 'themes/acme/assets/core/img/logo/logo.png';
+
+/** The theme with a binary logo at the path the server looks it up, built as a release artifact. */
+function producedWithLogo(): { root: string; entries: Map<string, Uint8Array> } {
+  const root = makeFlavorsRoot(THEME_FLAVORS);
+  mkdirSync(join(root, 'themes/acme/assets/core/img/logo'), { recursive: true });
+  writeFileSync(join(root, IMAGE), PNG);
+  const built = build({ flavorsRoot: root, flavor: 'f', kind: 'release', tree: makeServerTree(), out: tempDir('out') });
+  assert.equal(built.status, 0, built.stderr);
+  return { root, entries: readZip(built.stdout.trim()) };
+}
+
+test('a binary theme image is in the artifact at themes/<theme>/core/img/ and validates', () => {
+  const { root, entries } = producedWithLogo();
+  assert.deepEqual(entries.get('themes/acme/core/img/logo/logo.png'), new Uint8Array(PNG));
+
+  const result = validate(root, 'f', writeZip(entries));
+  assert.equal(result.status, 0, result.stderr);
+});
+
+test('a changed theme image is reported', () => {
+  const { root, entries } = producedWithLogo();
+  const changed = Buffer.from(PNG);
+  changed.writeUInt8(changed.readUInt8(changed.length - 20) ^ 0xff, changed.length - 20);
+  entries.set('themes/acme/core/img/logo/logo.png', new Uint8Array(changed));
+
+  const result = validate(root, 'f', writeZip(entries));
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /file themes\/acme\/core\/img\/logo\/logo\.png differs from theme acme/);
+});
+
+test('a missing theme image is reported', () => {
+  const { root, entries } = producedWithLogo();
+  entries.delete('themes/acme/core/img/logo/logo.png');
+
+  const result = validate(root, 'f', writeZip(entries));
+  assert.equal(result.status, 2, result.stderr);
+  assert.match(result.stderr, /missing file themes\/acme\/core\/img\/logo\/logo\.png of theme acme/);
+});

@@ -192,3 +192,47 @@ test('the translation overrides are copied to the legacy theme folder and nowher
   }
   assert.equal([...zip.keys()].some((p) => p.startsWith('lib/private/Ncw/') && p.endsWith('.json')), false);
 });
+
+/** width and height of a PNG from its IHDR chunk */
+function pngSize(bytes: Uint8Array): [number, number] {
+  const buf = Buffer.from(bytes);
+  assert.equal(buf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a', 'a PNG signature');
+  return [buf.readUInt32BE(16), buf.readUInt32BE(20)];
+}
+
+test('the real artifact carries the dummy logo set where the server looks images up (themes/ionos/core/img, 33 names)', () => {
+  const zip = buildRealCommon();
+  const img = 'themes/ionos/core/img';
+  const bytes = (path: string): Uint8Array => {
+    const entry = zip.get(`${img}/${path}`);
+    assert.ok(entry, `${img}/${path} is in the artifact`);
+    assert.deepEqual(entry, new Uint8Array(readFileSync(join(REPO_ROOT, 'themes/ionos/assets/core/img', path))), `${path} is the file of the package`);
+    return entry;
+  };
+  assert.deepEqual(pngSize(bytes('logo/logo.png')), [252, 120]);
+  assert.deepEqual(pngSize(bytes('favicon-touch.png')), [180, 180]);
+  assert.deepEqual(pngSize(bytes('favicon-fb.png')), [200, 200]);
+  const ico = Buffer.from(bytes('favicon.ico'));
+  assert.deepEqual([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4), ico[6], ico[7]], [0, 1, 1, 32, 32]);
+  for (const svg of ['logo/logo.svg', 'favicon-mask.svg']) {
+    const source = Buffer.from(bytes(svg)).toString('utf8');
+    assert.match(source, /^<svg /);
+    assert.doesNotMatch(source, /<text|font-family|<image|href=/i, `${svg} holds no text, font or embedded image`);
+  }
+  // the 32 default logo is core/img/logo/logo.svg: the pre-33 name core/img/logo.svg would not be looked up
+  assert.equal(zip.has(`${img}/logo.svg`), false);
+  assert.equal(zip.has(`${img}/logo.png`), false);
+});
+
+test('the dummy logo files are small and nothing of the theme refers to the Nextcloud logo', () => {
+  const img = join(REPO_ROOT, 'themes/ionos/assets/core/img');
+  for (const file of readdirSync(img, { recursive: true, withFileTypes: true }).filter((e) => e.isFile())) {
+    assert.ok(readFileSync(join(file.parentPath, file.name)).length < 8192, `${file.name} is under 8 KB`);
+  }
+  const sources = [
+    ...readdirSync(join(REPO_ROOT, 'themes/ionos/assets/css')).map((f) => join(REPO_ROOT, 'themes/ionos/assets/css', f)),
+    join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'),
+    join(REPO_ROOT, 'themes/ionos/mail/IonosEMailTemplate.php'),
+  ];
+  for (const path of sources) assert.doesNotMatch(readFileSync(path, 'utf8'), /img\/logo|logo\.(svg|png)|favicon/i, path);
+});

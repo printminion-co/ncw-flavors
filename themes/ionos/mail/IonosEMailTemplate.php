@@ -19,7 +19,7 @@ use OCP\L10N\IFactory;
  * structure and the placeholders of the originals. It is activated by the system setting `mail_template_class`.
  *
  * It holds no brand value of its own: change IonosTheme::LIGHT and IonosTheme::FONT_FACE. The header has the
- * instance logo from the theming app (the default one until a logo asset is added to the theme), the text only has
+ * instance logo from the theming app (the dummy logo of the theme folder unless an admin uploads one), the text only has
  * the instance name from the theming settings.
  */
 class IonosEMailTemplate extends EMailTemplate {

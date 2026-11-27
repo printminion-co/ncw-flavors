@@ -217,4 +217,4 @@ $CONFIG = ['ncw.themes' => ['OC\\Ncw\\Themes\\Acme'], 'enforce_theme' => 'acme']
 `enforce_theme` is left out when no theme is enforced. A flavor config may not set `ncw.themes` or `enforce_theme`.
 The server setting `ncw.themes` is read by a generic patch in the server fork (`IONOS(branding): register the theme
 classes listed in ncw.themes`); this tool only generates the config. The first theme package is `themes/ionos`
-(its README says where the brand values are and where a logo and a favicon go).
+(its README says where the brand values are, which logo and favicon files it ships and how to replace them).
