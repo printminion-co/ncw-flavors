@@ -100,3 +100,47 @@ test('the brand values of the IONOS theme are in IonosTheme.php only: the CSS an
   assert.match(theme, /BRAND VALUES ARE IN ONE PLACE/);
   for (const line of theme.split('\n').filter((l) => hex.test(l))) assert.match(line, /PLACEHOLDER/, line);
 });
+
+/** Builds the real base `common` (with the real theme package) as flavor f and returns the artifact entries. */
+function buildRealCommon(): Map<string, Uint8Array> {
+  const root = makeFlavorsRoot({ 'flavors/f/flavor.yaml': 'extends: [common]\n' });
+  cpSync(join(REPO_ROOT, 'bases/common'), join(root, 'bases/common'), { recursive: true });
+  cpSync(join(REPO_ROOT, 'themes'), join(root, 'themes'), { recursive: true });
+  const result = build({ flavorsRoot: root, flavor: 'f', tree: makeServerTree(), out: tempDir('out') });
+  assert.equal(result.status, 0, result.stderr);
+  return readZip(result.stdout.trim());
+}
+
+test('the instance settings for branding are in the base common and reach the artifact template', () => {
+  const zip = buildRealCommon();
+  assert.deepEqual(JSON.parse(text(zip, 'app-config.json')), {
+    apps: {
+      theming: {
+        backgroundMime: 'backgroundColor', // a plain color, no background image
+        background_color: '#2F5D9E',
+        imprintUrl: 'https://example.invalid/imprint',
+        name: 'IONOS Nextcloud Workspace',
+        primary_color: '#2F5D9E',
+        privacyUrl: 'https://example.invalid/privacy',
+        productName: 'IONOS Nextcloud Workspace',
+        slogan: '',
+        url: 'https://example.invalid/',
+      },
+    },
+  });
+  assert.deepEqual(JSON.parse(text(zip, 'app-config-special.json')), [
+    { app: 'theming', key: 'disable-user-theming', type: 'boolean', value: '1' },
+  ]);
+});
+
+test('the placeholder URLs of the instance settings are all on example.invalid', () => {
+  const settings = JSON.parse(text(buildRealCommon(), 'app-config.json')).apps.theming as Record<string, string>;
+  for (const key of ['url', 'imprintUrl', 'privacyUrl']) assert.match(settings[key] as string, /^https:\/\/example\.invalid\//, key);
+});
+
+test('the primary color of the instance settings is the primary color of the theme class', () => {
+  const settings = JSON.parse(text(buildRealCommon(), 'app-config.json')).apps.theming as Record<string, string>;
+  const light = /public const LIGHT = \[\s*'primary' => '(#[0-9A-Fa-f]{6})'/.exec(readFileSync(join(REPO_ROOT, 'themes/ionos/lib/IonosTheme.php'), 'utf8'));
+  assert.ok(light, 'IonosTheme::LIGHT starts with the primary color');
+  assert.equal(settings.primary_color?.toLowerCase(), light[1]?.toLowerCase());
+});

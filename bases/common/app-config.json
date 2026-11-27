@@ -1,0 +1,18 @@
+{
+  "apps": {
+    "theming": {
+      "name": "IONOS Nextcloud Workspace",
+      "productName": "IONOS Nextcloud Workspace",
+      "slogan": "",
+      "url": "https://example.invalid/",
+      "imprintUrl": "https://example.invalid/imprint",
+      "privacyUrl": "https://example.invalid/privacy",
+      "primary_color": "#2F5D9E",
+      "background_color": "#2F5D9E",
+      "backgroundMime": "backgroundColor"
+    }
+  },
+  "special": [
+    { "app": "theming", "key": "disable-user-theming", "value": "1", "type": "boolean" }
+  ]
+}
