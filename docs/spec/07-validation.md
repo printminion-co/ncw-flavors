@@ -36,8 +36,19 @@ Nextcloud's own test suites are not run.
   which must be enabled.
 - **Logs:** the run fails on new `nextcloud.log` error entries that are not on a short allow-list, and always on a
   `Disabled incompatible app` line.
-- **Brand check:** key pages (login, files, settings, admin overview, a sample email) must not contain the text
-  "Nextcloud" outside an allow-list of the product name, the AGPL attribution and documentation URLs.
+- **Brand check:** key pages must not contain the text "Nextcloud", in any case, outside an allow-list. The pages are the login page
+  and, with a session, the files page, the admin settings, the admin overview, the personal settings, the user theming section and
+  the admin theming section, plus a sample system mail made by the real mail template (HTML and text). A page is its HTML with the
+  settings it carries (the Base64 initial-state values) decoded. The allow-list has one entry per allowed phrase: a page, a strict
+  regexp and a reason (the product name "IONOS Nextcloud Workspace", the AGPL attribution, documentation URLs, identifiers, and the known
+  residuals of [06-branding.md](06-branding.md)); the shipped list comes from the real pages of a dev build, an entry that matches
+  nothing is noticed, and the bare word is never an entry. It is not a check of the text the browser builds from JS.
+- **Theme probes:** derived from the resolved flavor and the archive, so no per-flavor code: for an enforced theme, `enforce_theme` is set,
+  the login page carries `data-theme-<id>`, the theme stylesheet answers 200 with its scope and tokens and the user theming section lists only
+  that theme; when the archive disables user theming, the section says so; when the legacy `theme` setting is set, the admin theming section says
+  the instance is not themeable; when `mail_template_class` is set, the sample mail is made by that class. The brand check and the probes run in
+  every smoke test (fresh install and both upgrades) and a failure blocks publishing. The `brand` mode of the workflow input `smoke_break`
+  adds a "Nextcloud" text to the login template of the archive so that the check can be seen to fail.
 - **Databases:** SQLite by default; a MariaDB service container for the release-build upgrade smoke. The object
   store is covered only in the rehearsal.
 
