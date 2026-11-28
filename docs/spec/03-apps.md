@@ -14,6 +14,12 @@ stay in `shippedApps`. Added apps (vanilla or forked) are never put in `shippedA
 lists independently, so an added app can be always-enabled without being shipped, and a missing added app is
 auto-disabled on upgrade instead of aborting it.
 
+An app that the installer cannot enable is `available` and listed in `enable_after_install` (see
+[02-flavor-model.md](02-flavor-model.md)): `ncw-configure.sh` enables it with `occ app:enable` right after the install.
+Example: `groupfolders` in flavor1. `occ maintenance:install` installs every `default` app before any app is loaded,
+and groupfolders' migrations need services the app registers when it is loaded, so the install fails if it is `default`;
+`occ app:enable` on an installed instance works.
+
 `default` and `available` decide the state of fresh installs only. On an existing instance an installed app keeps
 its state; only `always` (forced on) and `removed` change it.
 

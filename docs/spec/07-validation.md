@@ -27,10 +27,13 @@ Nextcloud's own test suites are not run.
 
 - **Upgrade from:** the vanilla official archive of the base release (this guards the migration path), and the
   flavor's previous release when one exists.
+- **Install and configure:** the smoke test installs the archive with `occ maintenance:install`, then runs the
+  archive's own `ncw-configure.sh`, as a deployment does. It has no configuration code of its own.
 - **Probes:** `status.php`, the login page, OCS capabilities, DAV list, upload and download, the files page, admin
   settings and overview, `cron.php` and `files:scan`.
 - **App states:** read with `occ app:list --output=json_pretty` and compared with the resolved flavor: `always` and
-  `default` apps enabled, `removed` apps absent, `available` apps disabled.
+  `default` apps enabled, `removed` apps absent, `available` apps disabled, except the apps in `enable_after_install`,
+  which must be enabled.
 - **Logs:** the run fails on new `nextcloud.log` error entries that are not on a short allow-list, and always on a
   `Disabled incompatible app` line.
 - **Brand check:** key pages (login, files, settings, admin overview, a sample email) must not contain the text

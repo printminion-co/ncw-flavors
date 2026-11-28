@@ -18,7 +18,9 @@ change.
 ## Installing
 
 First install is done from the command line: `occ maintenance:install` with values fed from the environment. There
-is no browser installer and no `autoconfig.php`. Then import `app-config.json` (see [02](02-flavor-model.md)).
+is no browser installer and no `autoconfig.php`. Then run `bash ncw-configure.sh` from the artifact (see
+[04](04-build-and-artifact.md)): it imports `app-config.json`, sets the special settings and enables the apps the
+installer cannot (`enable_after_install`). The deployment contains no other `occ` logic for the flavor.
 
 ## Upgrading to a new artifact
 
@@ -30,7 +32,7 @@ One maintenance window.
    upgrade check is skipped under channel `git` there and a dropped enabled app could stay enabled with no files.
 2. Swap in the new artifact.
 3. Run `occ upgrade`.
-4. Import `app-config.json` and apply the instance settings (see [06](06-branding.md)).
+4. Run `bash ncw-configure.sh` (it imports `app-config.json` and enables the `enable_after_install` apps) and apply the instance settings (see [06](06-branding.md)).
 5. Run the smoke checks (see [07](07-validation.md)) and leave maintenance mode.
 
 `occ` is used only for install, upgrade, app config and instance settings, never for server configuration.

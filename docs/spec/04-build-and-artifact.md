@@ -11,7 +11,7 @@ Contents: the patched server tree, the flavor's apps with PHP dependencies and b
 generated for the flavor, the flavor's partial configs in `config/`, `app-config.json`, `app-config-special.json`
 (the sensitive, lazy and typed settings that the import cannot set), `removed-apps.json` (the vanilla apps the flavor
 drops that are in the server tree's shipped list; a dropped added or forked app is not listed), `version.json` and
-`.buildnumber`. Not in it: `updater/` (the official archive adds it from a separate repo; the
+`.buildnumber`, and `ncw-configure.sh`. Not in it: `updater/` (the official archive adds it from a separate repo; the
 server repo has none), `config/CAN_INSTALL` (the official archive ships it; the build deletes it), and the dev files
 the build strips: `.git*`, `node_modules`, `tests` and `test` folders inside apps, and the fork's `IONOS/` submodule.
 
@@ -42,6 +42,20 @@ start (the web UI errors, `occ` aborts, `status.php` returns an empty body). Ups
 untouched (ADR 0003). Nextcloud's update checks do not apply to this version and are not used.
 
 The build also rewrites `version.php` so that `$OC_Channel = 'git'`.
+
+## `ncw-configure.sh`
+
+The build generates this script at the archive root from the resolved flavor. It needs only bash (4.4 or newer) and the
+archive's own `php occ`: no jq, no envsubst, no python. The zip keeps no unix modes, so it is run as `bash ncw-configure.sh`.
+In order, and stopping at the first failure, it: (1) imports `app-config.json` with `occ config:import`, after filling the
+`${ENV_VAR}` placeholders from the environment (it first fails and names every required variable that is unset; optional
+variables use the default declared in the manifest); (2) sets each entry of `app-config-special.json` with
+`occ config:app:set`; (3) enables each `enable_after_install` app with `occ app:enable` unless `occ app:list` shows it
+enabled. It logs one line per step, never a value, and is idempotent. `OCC` and `PHP` can override the commands (tests use
+a stub). `ncw validate` requires the script and compares it with the one generated for the flavor.
+
+**Helm (or any deployment) runs it once after `occ maintenance:install` and once after every `occ upgrade`**, with the
+instance's environment, and does no other `occ` work for the flavor.
 
 ## `version.json`
 
@@ -78,7 +92,7 @@ Per run:
    `removed` apps, strip dev files.
 4. Generate `core/shipped.json` and the `apps_paths` partial config, copy the flavor's partials, delete
    `config/CAN_INSTALL`.
-5. Write `app-config.json`, `app-config-special.json`, `removed-apps.json`, `version.json` and `.buildnumber`.
+5. Write `app-config.json`, `app-config-special.json`, `removed-apps.json`, `ncw-configure.sh`, `version.json` and `.buildnumber`.
 6. Run the validation layers (see [07-validation.md](07-validation.md)); a failure blocks publishing.
 7. Zip it, add a checksum and a build-provenance attestation, and attach it to the GitHub release of the snapshot
    tag in the fork. Rebuilds of the same snapshot attach new assets with new build numbers.
