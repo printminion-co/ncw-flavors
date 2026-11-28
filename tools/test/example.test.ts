@@ -156,6 +156,12 @@ test('the client download links of the real base are placeholders and switch off
   });
 });
 
+const SOURCE_OFFER_STRINGS = [
+  'This server is based on the Nextcloud server by the Nextcloud community and has been modified.',
+  'The source code of the running version is available here.',
+  'It is licensed under the GNU Affero General Public License (AGPL).',
+];
+
 /** Every override file of the real theme package: path below assets/ and the decoded translations. */
 function l10nOverrides(): { file: string; translations: Record<string, string> }[] {
   const assets = join(REPO_ROOT, 'themes/ionos/assets');
@@ -179,6 +185,9 @@ test('the translation overrides of the real theme are valid and say only the pro
     assert.ok(entries.length > 0, file);
     for (const [source, target] of entries) {
       assert.equal(typeof target, 'string', `${file}: ${source}`);
+      // the strings of the source offer (themes/ionos/assets/apps/settings/templates, see source-offer.test.ts) name the
+      // upstream project on purpose: the AGPL attribution
+      if (SOURCE_OFFER_STRINGS.includes(source)) continue;
       assert.ok(target.includes('IONOS Nextcloud Workspace'), `${file}: the target names the product: ${target}`);
       assert.equal(target.replaceAll('IONOS Nextcloud Workspace', '').toLowerCase().includes('nextcloud'), false, `${file}: ${target}`);
     }

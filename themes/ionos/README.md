@@ -104,6 +104,35 @@ kind, so an override would replace the whole file), and text that is written in 
 
 ## Templates
 
-A template of the server is replaced by the file of the same path below `assets/`, for example
-`assets/apps/settings/templates/settings/personal/development.notice.php` (checked: the theme file is used). The
-source-link override of the development notice belongs to its own change; no template is overridden yet.
+A template of the server is replaced by the file of the same path below `assets/` (checked on a real install: the theme
+file is used). One template is overridden:
+
+### Source offer: `assets/apps/settings/templates/settings/personal/development.notice.php`
+
+The AGPL requires offering the modified source to users, and Nextcloud has no source-offer field. The personal
+development notice of the settings app is replaced by a notice that:
+
+- attributes the upstream project (the sentence "This server is based on the Nextcloud server by the Nextcloud community
+  and has been modified.", the only place with the text Nextcloud besides the product name),
+- links the source of the RUNNING version, and
+- keeps the AGPL license link.
+
+The upstream marketing is gone: the "Reasons to use" PDF link and the five social links with their images.
+
+**The repository URL is the brand value `$ncwSourceRepository` at the top of the template** (marked `BRAND VALUE`; the
+public repository of the modified server, `https://github.com/printminion-co/mk-nc-server`). Change it there only.
+
+The link is made at runtime from `version.json` in the server root (written by the build):
+
+| `kind` | fields read | link |
+|---|---|---|
+| `release` | `base_release`, `release_number` | `<repository>/tree/ncw-v<base_release>-<release_number>` (the annotated snapshot tag) |
+| `dev` | `server_commit` | `<repository>/tree/<server_commit>` (the full sha) |
+
+Anything else falls back to the plain repository URL: the file is missing, not readable or not JSON, the kind is unknown,
+or a value does not match a strict pattern (the tag `^[A-Za-z0-9._-]+$`, the sha `^[0-9a-f]{40}$`, the release number an
+integer of at least 1). Reading never throws, so the personal page does not break. All output goes through `p()`.
+
+The three strings go through `$l->t()` with English text; `assets/apps/settings/l10n/{en,de}.json` carry the English and
+German entries (the PHP side of the l10n override works for templates, unlike the JS files). The brand check of the smoke
+tests (the fork) allows the attribution sentence and checks that the page links the expected source exactly once.
