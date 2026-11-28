@@ -26,10 +26,14 @@ installer cannot (`enable_after_install`). The deployment contains no other `occ
 
 One maintenance window.
 
-1. Disable the apps listed in `removed-apps.json` on the old version (`occ app:disable`, idempotent). On 33 this is
-   hygiene: an app removed from all three `shipped.json` lists is auto-disabled by `occ upgrade`, but the step
-   avoids an error log entry and a re-download attempt. On 35 it is required until tested otherwise, because the
-   upgrade check is skipped under channel `git` there and a dropped enabled app could stay enabled with no files.
+1. Disable the apps listed in `removed-apps.json` on the old version (`occ app:disable`; an app the old version does
+   not have is skipped). An app that the old version always enables, such as the core app `workflowengine`, cannot be
+   disabled: `occ app:disable` refuses with exit status 2 ("can't be disabled"). The deployment must tolerate exactly
+   that refusal and stop on any other failure of this step. `occ upgrade` then takes such an app out and logs
+   `Disabled incompatible app: <id>` once. On 33 the step is otherwise hygiene: an app removed from all three
+   `shipped.json` lists is auto-disabled by `occ upgrade`, but the step avoids an error log entry and a re-download
+   attempt. On 35 it is required until tested otherwise, because the upgrade check is skipped under channel `git`
+   there and a dropped enabled app could stay enabled with no files.
 2. Swap in the new artifact.
 3. Run `occ upgrade`.
 4. Run `bash ncw-configure.sh` (it imports `app-config.json` and enables the `enable_after_install` apps) and apply the instance settings (see [06](06-branding.md)).

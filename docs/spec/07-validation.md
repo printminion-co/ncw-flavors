@@ -25,8 +25,13 @@ Nextcloud's own test suites are not run.
 
 ## Smoke tests
 
-- **Upgrade from:** the vanilla official archive of the base release (this guards the migration path), and the
-  flavor's previous release when one exists.
+- **Upgrade from:** the vanilla official archive of the base release (this guards the migration path; it is downloaded
+  with its sha256 and its signature checked against the Nextcloud release key), and the flavor's previous release when
+  one exists (none exists yet, so this is not run). The test follows the deployment contract of
+  [05-deployment.md](05-deployment.md): install the vanilla release with the data folder outside the code tree, disable
+  the apps of `removed-apps.json` on it, swap in the archive keeping `config/config.php` and the data folder, run
+  `occ upgrade` and `ncw-configure.sh`, then the same probes, app states and log check as the fresh install. App states
+  after an upgrade are compared with their state before it: only `always` and `removed` apps change state.
 - **Install and configure:** the smoke test installs the archive with `occ maintenance:install`, then runs the
   archive's own `ncw-configure.sh`, as a deployment does. It has no configuration code of its own.
 - **Probes:** `status.php`, the login page, OCS capabilities, DAV list, upload and download, the files page, admin
@@ -35,7 +40,10 @@ Nextcloud's own test suites are not run.
   `default` apps enabled, `removed` apps absent, `available` apps disabled, except the apps in `enable_after_install`,
   which must be enabled.
 - **Logs:** the run fails on new `nextcloud.log` error entries that are not on a short allow-list, and always on a
-  `Disabled incompatible app` line.
+  `Disabled incompatible app` line. The one exception is after an upgrade: the line is accepted, with the updater's
+  exact wording, for the removed apps that the old version always enables (`workflowengine`), because `occ upgrade` is
+  what takes them out (see [05-deployment.md](05-deployment.md)). The allow-list also holds, each entry with a reason,
+  the error `No application directories are marked as writable` (the app folders are read-only).
 - **Brand check:** key pages must not contain the text "Nextcloud", in any case, outside an allow-list. The pages are the login page
   and, with a session, the files page, the admin settings, the admin overview, the personal settings, the user theming section and
   the admin theming section, plus a sample system mail made by the real mail template (HTML and text). A page is its HTML with the
@@ -49,8 +57,9 @@ Nextcloud's own test suites are not run.
   the instance is not themeable; when `mail_template_class` is set, the sample mail is made by that class. The brand check and the probes run in
   every smoke test (fresh install and both upgrades) and a failure blocks publishing. The `brand` mode of the workflow input `smoke_break`
   adds a "Nextcloud" text to the login template of the archive so that the check can be seen to fail.
-- **Databases:** SQLite by default; a MariaDB service container for the release-build upgrade smoke. The object
-  store is covered only in the rehearsal.
+- **Databases:** SQLite for every build; release builds also run the upgrade smoke on a MariaDB service container
+  (the oldest supported long-term release, 10.11, set in one place and overridable; the production version is for the
+  owner to confirm). The object store is covered only in the rehearsal.
 
 ## Gate
 
