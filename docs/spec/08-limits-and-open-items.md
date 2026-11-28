@@ -14,12 +14,17 @@ A throwaway prototype ran on Nextcloud 33.0.9 (official archive, SQLite, PHP 8.3
 - a lower or missing build number is blocked as a downgrade;
 - a fresh install of a flavor tree comes up with exactly the flavor's apps.
 
-Everything else in this spec comes from reading Nextcloud's source (v33.0.9, stable34, stable35) and its
-documentation, and is untested: stable34 and 35 were not run, a build from source was not exercised (the official
-archive was the base), `appstoreenabled=true`, third-party apps and a real deployment layout were not tried, and the
-claim that the `IManager` alias in core only matters to the workflow engine app comes from the source. The
-ThemesService registration, the theme template override for the development notice and the `appstore` app removal
-are not tested.
+The pipeline built from this spec has since run on GitHub for 33.0.9: builds from source of the server and of every
+app, the fresh-install and upgrade smoke tests on SQLite and on MariaDB 10.11, the `ThemesService` registration, and
+the theme folder lookup for templates, translations, logos and the web manifest (including the template override of
+the development notice). Everything else in this spec comes from reading Nextcloud's source (v33.0.9, stable34,
+stable35) and its documentation, and is untested: stable34 and 35 were not run, `appstoreenabled=true`, third-party
+apps, the `appstore` app removal and a real deployment layout (object store, Helm) were not tried, and the claim that
+the `IManager` alias in core only matters to the workflow engine app comes from the source.
+
+Two behaviors seen in those runs: after an upgrade, `cron.php` logs level-2 warnings for the background jobs of the
+removed apps, which stay registered (harmless noise, a possible cleanup step in `ncw-configure.sh`); and the
+pre-disable step cannot disable always-enabled core apps (see [05-deployment.md](05-deployment.md)).
 
 Facts used: Nextcloud server and its bundled apps are AGPL-3.0-or-later; the trademark policy is as cited in
 [06-branding.md](06-branding.md); the stable line schedule is as of November 2026 and changes.
@@ -27,8 +32,11 @@ Facts used: Nextcloud server and its bundled apps are AGPL-3.0-or-later; the tra
 ## Known exceptions to "no server code changes"
 
 1. The generic `ThemesService` registration patch (ADR 0006).
-2. Possibly a small patch to the development notice, if the theme template override does not work.
-3. The `ionos-*.yml` workflow files, which are commits in the series and are kept up to date on each rebase.
+2. The `ionos-*.yml` workflow files and their scripts, which are commits in the series and are kept up to date on each
+   rebase.
+
+The theme template override of the development notice works on 33, so no patch of the notice is needed; the exception
+would only come back on a line where the override stops working.
 
 ## Open items for the owner
 
